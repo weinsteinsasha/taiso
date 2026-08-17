@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radio Taiso — Клод не будет работать, пока ты не сделаешь зарядку</title>
+<meta name="description" content="3 минуты японской зарядки = час работы AI-агента. Анти-сидячий шлагбаум для Claude Code на macOS.">
+<style>
+  :root { --bg:#101014; --card:#1a1a21; --fg:#ececf1; --muted:#8a8a96;
+          --accent:#e8543f; --ok:#4ec97a; --mono:"SF Mono",Menlo,monospace; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--fg); min-height:100vh;
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+         display:flex; flex-direction:column; align-items:center; }
+  main { max-width:680px; padding:64px 24px 80px; width:100%; }
+  .torii { font-size:64px; line-height:1; }
+  h1 { font-size:clamp(28px,5vw,44px); line-height:1.15; margin:20px 0 14px;
+       letter-spacing:-.02em; }
+  h1 em { color:var(--accent); font-style:normal; }
+  .sub { color:var(--muted); font-size:19px; line-height:1.5; margin-bottom:36px; }
+  .install { background:var(--card); border:1px solid #2a2a33; border-radius:12px;
+             padding:18px 20px; margin-bottom:10px; }
+  .install-label { font-size:13px; color:var(--muted); text-transform:uppercase;
+                   letter-spacing:.08em; margin-bottom:10px; }
+  .cmd { display:flex; gap:10px; align-items:center; }
+  code { font-family:var(--mono); font-size:13px; color:var(--ok);
+         word-break:break-all; flex:1; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px;
+           padding:10px 18px; font-size:14px; font-weight:600; cursor:pointer;
+           white-space:nowrap; }
+  button:active { transform:scale(.97); }
+  .req { color:var(--muted); font-size:13px; margin-bottom:48px; }
+  .req a { color:var(--muted); }
+  .how { display:grid; gap:14px; margin-bottom:48px; }
+  .step { background:var(--card); border-radius:12px; padding:18px 20px;
+          display:flex; gap:16px; align-items:baseline; }
+  .n { color:var(--accent); font-family:var(--mono); font-size:15px; }
+  .step div { line-height:1.5; }
+  .step b { display:block; margin-bottom:2px; }
+  .step span { color:var(--muted); font-size:15px; }
+  .quote { border-left:3px solid var(--accent); padding:4px 0 4px 18px;
+           margin-bottom:48px; color:var(--muted); font-size:16px; line-height:1.6; }
+  .quote b { color:var(--fg); }
+  footer { color:var(--muted); font-size:13px; padding-bottom:40px; text-align:center;
+           line-height:1.7; }
+  footer a { color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div class="torii">⛩</div>
+  <h1>Клод не будет работать,<br>пока ты <em>не сделаешь зарядку</em></h1>
+  <p class="sub">3 минуты японской Radio Taiso = час работы агента.
+     Для тех, кто сидит с Claude Code по 10 часов и чья спина уже всё поняла.</p>
+
+  <div class="install">
+    <div class="install-label">Установка — одна команда в Терминале</div>
+    <div class="cmd">
+      <code id="cmd">/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/weinsteinsasha/taiso/main/get.sh)"</code>
+      <button onclick="navigator.clipboard.writeText(document.getElementById('cmd').textContent).then(()=>{this.textContent='Скопировано ✓';setTimeout(()=>this.textContent='Скопировать',1500)})">Скопировать</button>
+    </div>
+  </div>
+  <p class="req">macOS · <a href="https://claude.com/claude-code">Claude Code</a> · Homebrew · Xcode CLT.
+     Код открыт: <a href="https://github.com/weinsteinsasha/taiso">github.com/weinsteinsasha/taiso</a></p>
+
+  <div class="how">
+    <div class="step"><span class="n">01</span><div><b>Работаешь как обычно</b>
+      <span>Баланс минут — в menubar (⛩ 58) и в конце каждого ответа Клода. Пока агент пашет, счётчик честно тает.</span></div></div>
+    <div class="step"><span class="n">02</span><div><b>Кончился баланс — можно в долг</b>
+      <span>До −20 минут: звонок или поток никто не рубит. Но долг удорожает зарядку в полтора раза.</span></div></div>
+    <div class="step"><span class="n">03</span><div><b>Долг исчерпан — Клод останавливается</b>
+      <span>И сам, своими словами, уговаривает тебя встать. Экран, браузер, звонки работают. Не работает только агент.</span></div></div>
+    <div class="step"><span class="n">04</span><div><b>3 минуты Radio Taiso — и дальше</b>
+      <span>Полноэкранное видео, встал у стола, повторил, окно само закрылось. Стрик растёт, спина отпускает.</span></div></div>
+  </div>
+
+  <div class="quote">«Напоминания от Гармина не работают никогда. Спина болит по утрам,
+    пока не разомну» — <b>каждый опрошенный оператор агентов, 8–12 часов в день</b>.
+    Добровольные напоминалки закрываются одной кнопкой. Работает только шлагбаум.</div>
+
+  <footer>
+    Никакой камеры · никаких серверов · ноль сетевых вызовов в рантайме · всё локально<br>
+    Честное снятие: <code style="font-size:12px">~/.radio-taiso/bin/uninstall.sh</code> — вернёт всё как было<br><br>
+    MIT · сделано за выходные внутри Claude Code · <a href="mailto:weinsteinsasha@gmail.com">фидбек</a>
+  </footer>
+</main>
+</body>
+</html>
