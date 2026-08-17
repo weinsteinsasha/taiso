@@ -4,54 +4,100 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Radio Taiso — Клод не будет работать, пока ты не сделаешь зарядку</title>
-<meta name="description" content="3 минуты японской зарядки = час работы AI-агента. Анти-сидячий шлагбаум для Claude Code на macOS.">
+<meta name="description" content="3 минуты японской зарядки = час работы AI-агента. Практика, которую Япония делает каждое утро с 1928 года — теперь встроена в Claude Code.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#101014; --card:#1a1a21; --fg:#ececf1; --muted:#8a8a96;
-          --accent:#e8543f; --ok:#4ec97a; --mono:"SF Mono",Menlo,monospace; }
+  :root { --paper:#f6f1e7; --ink:#26231e; --muted:#7a7264; --vermilion:#c73e2c;
+          --indigo:#2b4a6f; --card:#fffdf8; --line:#e4dccb; --mono:"SF Mono",Menlo,monospace; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:var(--bg); color:var(--fg); min-height:100vh;
-         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-         display:flex; flex-direction:column; align-items:center; }
-  main { max-width:680px; padding:64px 24px 80px; width:100%; }
-  .torii { font-size:64px; line-height:1; }
-  h1 { font-size:clamp(28px,5vw,44px); line-height:1.15; margin:20px 0 14px;
-       letter-spacing:-.02em; }
-  h1 em { color:var(--accent); font-style:normal; }
-  .sub { color:var(--muted); font-size:19px; line-height:1.5; margin-bottom:36px; }
-  .install { background:var(--card); border:1px solid #2a2a33; border-radius:12px;
-             padding:18px 20px; margin-bottom:10px; }
-  .install-label { font-size:13px; color:var(--muted); text-transform:uppercase;
-                   letter-spacing:.08em; margin-bottom:10px; }
-  .cmd { display:flex; gap:10px; align-items:center; }
-  code { font-family:var(--mono); font-size:13px; color:var(--ok);
-         word-break:break-all; flex:1; }
-  button { background:var(--accent); color:#fff; border:0; border-radius:8px;
-           padding:10px 18px; font-size:14px; font-weight:600; cursor:pointer;
-           white-space:nowrap; }
-  button:active { transform:scale(.97); }
-  .req { color:var(--muted); font-size:13px; margin-bottom:48px; }
-  .req a { color:var(--muted); }
-  .how { display:grid; gap:14px; margin-bottom:48px; }
-  .step { background:var(--card); border-radius:12px; padding:18px 20px;
-          display:flex; gap:16px; align-items:baseline; }
-  .n { color:var(--accent); font-family:var(--mono); font-size:15px; }
-  .step div { line-height:1.5; }
-  .step b { display:block; margin-bottom:2px; }
+  body { background:var(--paper); color:var(--ink); line-height:1.6;
+         font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif; }
+  .jp { font-family:"Noto Serif JP",serif; }
+  main { max-width:720px; margin:0 auto; padding:56px 24px 72px; }
+  section { margin-bottom:72px; }
+  .kanji-bg { position:relative; }
+  .kanji-bg::after { content:"体操"; position:absolute; top:-30px; right:-10px;
+      font-family:"Noto Serif JP",serif; font-size:120px; color:var(--ink);
+      opacity:.05; pointer-events:none; line-height:1; }
+  .torii { font-size:56px; line-height:1; }
+  h1 { font-size:clamp(30px,5vw,46px); line-height:1.2; margin:18px 0 16px;
+       letter-spacing:-.02em; font-weight:600; }
+  h1 em { color:var(--vermilion); font-style:normal; }
+  h2 { font-size:24px; margin-bottom:18px; font-weight:600; }
+  h2 .jp { color:var(--vermilion); font-weight:400; font-size:20px; margin-right:10px; }
+  .sub { color:var(--muted); font-size:19px; margin-bottom:34px; max-width:56ch; }
+  .divider { border:0; border-top:1px solid var(--line); margin:0 0 72px; }
+
+  .video-wrap { position:relative; padding-top:56.25%; border-radius:14px;
+      overflow:hidden; box-shadow:0 8px 40px rgba(38,35,30,.18); margin-bottom:14px; }
+  .video-wrap iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
+  .video-cap { color:var(--muted); font-size:14px; text-align:center; }
+
+  .install { background:var(--ink); border-radius:14px; padding:20px 22px; margin-bottom:12px; }
+  .install-label { font-size:12px; color:#b8ac93; text-transform:uppercase;
+      letter-spacing:.1em; margin-bottom:10px; }
+  .cmd { display:flex; gap:12px; align-items:center; }
+  .cmd code { font-family:var(--mono); font-size:13px; color:#8fd9a8;
+      word-break:break-all; flex:1; }
+  .cmd button { background:var(--vermilion); color:#fff; border:0; border-radius:8px;
+      padding:11px 20px; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .cmd button:active { transform:scale(.97); }
+  .req { color:var(--muted); font-size:13px; }
+  .req a { color:var(--indigo); }
+
+  .steps { display:grid; gap:12px; counter-reset:s; }
+  .step { background:var(--card); border:1px solid var(--line); border-radius:12px;
+      padding:18px 20px; display:flex; gap:16px; align-items:baseline; }
+  .step::before { counter-increment:s; content:"0" counter(s);
+      color:var(--vermilion); font-family:var(--mono); font-size:14px; }
+  .step b { display:block; margin-bottom:3px; }
   .step span { color:var(--muted); font-size:15px; }
-  .quote { border-left:3px solid var(--accent); padding:4px 0 4px 18px;
-           margin-bottom:48px; color:var(--muted); font-size:16px; line-height:1.6; }
-  .quote b { color:var(--fg); }
-  footer { color:var(--muted); font-size:13px; padding-bottom:40px; text-align:center;
-           line-height:1.7; }
-  footer a { color:var(--muted); }
+
+  .phil p { margin-bottom:16px; font-size:16.5px; }
+  .phil .big { font-family:"Noto Serif JP",serif; font-size:21px; line-height:1.65; }
+  .fact-row { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:26px 0; }
+  .fact { background:var(--card); border:1px solid var(--line); border-radius:12px;
+      padding:16px; text-align:center; }
+  .fact b { display:block; font-size:26px; color:var(--vermilion);
+      font-family:"Noto Serif JP",serif; }
+  .fact span { font-size:13px; color:var(--muted); }
+
+  .no-mat { background:linear-gradient(135deg,#fffdf8,#f2ead9); border:1px solid var(--line);
+      border-radius:14px; padding:24px 26px; }
+  .no-mat b { font-size:18px; display:block; margin-bottom:8px; }
+  .no-mat p { color:var(--muted); font-size:15.5px; }
+
+  .quotes { display:grid; gap:14px; }
+  .q { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--vermilion);
+      border-radius:12px; padding:18px 20px; }
+  .q p { font-size:16px; margin-bottom:8px; }
+  .q span { color:var(--muted); font-size:13.5px; }
+
+  table { width:100%; border-collapse:collapse; background:var(--card);
+      border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:15px; }
+  th, td { padding:13px 16px; text-align:left; border-bottom:1px solid var(--line); }
+  th { background:#efe8d8; font-weight:600; font-size:13.5px; }
+  td:first-child { color:var(--muted); }
+  td b.was { color:var(--muted); font-weight:500; }
+  td b.now { color:var(--indigo); }
+  .note { color:var(--muted); font-size:13px; margin-top:10px; }
+
+  footer { color:var(--muted); font-size:13.5px; text-align:center; line-height:1.8;
+      border-top:1px solid var(--line); padding-top:32px; }
+  footer a { color:var(--indigo); }
+  footer .jp { font-size:16px; color:var(--vermilion); }
+  @media (max-width:560px){ .fact-row{grid-template-columns:1fr;} .kanji-bg::after{display:none;} }
 </style>
 </head>
 <body>
 <main>
+
+<section class="kanji-bg">
   <div class="torii">⛩</div>
   <h1>Клод не будет работать,<br>пока ты <em>не сделаешь зарядку</em></h1>
-  <p class="sub">3 минуты японской Radio Taiso = час работы агента.
-     Для тех, кто сидит с Claude Code по 10 часов и чья спина уже всё поняла.</p>
+  <p class="sub">Три минуты японской Radio Taiso покупают час работы твоего AI-агента.
+     Мягкая, старая как радио практика — и шлагбаум, который невозможно закрыть кнопкой «потом».</p>
 
   <div class="install">
     <div class="install-label">Установка — одна команда в Терминале</div>
@@ -60,29 +106,123 @@
       <button onclick="navigator.clipboard.writeText(document.getElementById('cmd').textContent).then(()=>{this.textContent='Скопировано ✓';setTimeout(()=>this.textContent='Скопировать',1500)})">Скопировать</button>
     </div>
   </div>
-  <p class="req">macOS · <a href="https://claude.com/claude-code">Claude Code</a> · Homebrew · Xcode CLT.
-     Код открыт: <a href="https://github.com/weinsteinsasha/taiso">github.com/weinsteinsasha/taiso</a></p>
+  <p class="req">macOS · <a href="https://claude.com/claude-code">Claude Code</a> · Homebrew · Xcode CLT ·
+     код открыт: <a href="https://github.com/weinsteinsasha/taiso">github.com/weinsteinsasha/taiso</a></p>
+</section>
 
-  <div class="how">
-    <div class="step"><span class="n">01</span><div><b>Работаешь как обычно</b>
-      <span>Баланс минут — в menubar (⛩ 58) и в конце каждого ответа Клода. Пока агент пашет, счётчик честно тает.</span></div></div>
-    <div class="step"><span class="n">02</span><div><b>Кончился баланс — можно в долг</b>
-      <span>До −20 минут: звонок или поток никто не рубит. Но долг удорожает зарядку в полтора раза.</span></div></div>
-    <div class="step"><span class="n">03</span><div><b>Долг исчерпан — Клод останавливается</b>
-      <span>И сам, своими словами, уговаривает тебя встать. Экран, браузер, звонки работают. Не работает только агент.</span></div></div>
-    <div class="step"><span class="n">04</span><div><b>3 минуты Radio Taiso — и дальше</b>
-      <span>Полноэкранное видео, встал у стола, повторил, окно само закрылось. Стрик растёт, спина отпускает.</span></div></div>
+<section>
+  <h2><span class="jp">体操</span>Вот эта зарядка</h2>
+  <div class="video-wrap">
+    <iframe src="https://www.youtube-nocookie.com/embed/UVwKbfYlJUM" title="Radio Taiso No.1"
+      allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>
   </div>
+  <p class="video-cap">Radio Taiso №1 — та самая, канон 1951 года. 3 минуты 22 секунды, 13 движений, всё тело.
+     Именно этот ролик открывается на весь экран, когда баланс на нуле.</p>
+</section>
 
-  <div class="quote">«Напоминания от Гармина не работают никогда. Спина болит по утрам,
-    пока не разомну» — <b>каждый опрошенный оператор агентов, 8–12 часов в день</b>.
-    Добровольные напоминалки закрываются одной кнопкой. Работает только шлагбаум.</div>
+<section class="no-mat">
+  <b>Не нужен коврик. Не нужна форма. Не нужно даже вставать (но лучше встань)</b>
+  <p>Radio Taiso придумана для того, чтобы её делали где угодно: у стола, между стульями,
+     в офисной рубашке. Шаг в сторону от ноутбука — вся площадка, что нужна. Есть и версия
+     сидя — для звонков, самолётов и совсем ленивых дней. Никакой йоги, никакого пота,
+     ничего, что требует переодеться или выйти из комнаты.</p>
+</section>
 
-  <footer>
-    Никакой камеры · никаких серверов · ноль сетевых вызовов в рантайме · всё локально<br>
-    Честное снятие: <code style="font-size:12px">~/.radio-taiso/bin/uninstall.sh</code> — вернёт всё как было<br><br>
-    MIT · сделано за выходные внутри Claude Code · <a href="mailto:weinsteinsasha@gmail.com">фидбек</a>
-  </footer>
+<section class="phil">
+  <h2><span class="jp">長寿</span>Почему японцы, почему это работает</h2>
+  <p class="big">С 1928 года каждое утро в 6:30 по национальному радио Япония делает
+     одну и ту же трёхминутную зарядку. Почти сто лет. Школы, заводы, офисы, парки,
+     деревенские площади.</p>
+  <p>Секрет не в интенсивности — движения нарочно мягкие. Секрет в том, что убраны все
+     причины не делать: не надо выбирать упражнения, не надо переодеваться, не надо
+     решать «когда». Музыка началась — тело само вспомнило. Это ритуал, а не тренировка,
+     и поэтому он переживает любые дедлайны.</p>
+  <p>Япония — страна с одной из самых высоких продолжительностей жизни на планете,
+     и геронтологи среди причин стабильно называют не марафоны, а ежедневное лёгкое
+     движение, встроенное в быт. Radio Taiso — самый массовый его пример: практика
+     старше телевидения, которую делают десятки миллионов людей.</p>
+  <div class="fact-row">
+    <div class="fact"><b>1928</b><span>первый эфир на радио NHK</span></div>
+    <div class="fact"><b>~27 млн</b><span>японцев делают её регулярно</span></div>
+    <div class="fact"><b>84+</b><span>лет — продолжительность жизни в Японии</span></div>
+  </div>
+  <p>Мы просто поменяли триггер: вместо радио в 6:30 — твой агент, который раз в час
+     говорит «сначала зарядка, потом код». Япония сто лет знала, как заставить страну
+     двигаться. Мы лишь подключили это к Claude Code.</p>
+</section>
+
+<section>
+  <h2><span class="jp">声</span>Из опроса операторов агентов</h2>
+  <div class="quotes">
+    <div class="q"><p>«Сижу 8–9 часов. Не делаю ничего — считаю, что зарядка утром работает
+      весь день, хотя это точно не так. Напоминания от Гармина не работают никогда.
+      Спина болит по утрам, пока не разомну».</p>
+      <span>оператор агентов, 8–9 ч/день с Claude Code</span></div>
+    <div class="q"><p>«10–12 часов. Безостановочно гоняю Клода с телефона или ноутбука —
+      даже когда хожу по беговой дорожке. Болит спина, живот вырос».</p>
+      <span>фаундер, 10–12 ч/день</span></div>
+    <div class="q"><p>«Последний месяц почти не сидел за компом — и ничего не болит,
+      начала появляться форма. До этого сидел по 6–7 часов».</p>
+      <span>тот же опрос — единственный, у кого ничего не болит. Совпадение? Нет</span></div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="jp">道</span>Как это устроено</h2>
+  <div class="steps">
+    <div class="step"><div><b>Работаешь как обычно</b>
+      <span>Баланс минут тикает в menubar (⛩ 58) и в конце каждого ответа Клода.
+      Пока агент пашет — время честно идёт.</span></div></div>
+    <div class="step"><div><b>Кончился баланс — можно в долг</b>
+      <span>До −20 минут: звонок или поток никто не рубит. Долг просто удорожает
+      следующую зарядку в полтора раза.</span></div></div>
+    <div class="step"><div><b>Долг исчерпан — Клод мягко останавливается</b>
+      <span>И сам, своими словами, предлагает встать. Экран, браузер, звонки работают.
+      Отдыхает только агент.</span></div></div>
+    <div class="step"><div><b>3 минуты — и дальше</b>
+      <span>Видео на весь экран, повторил движения, окно само закрылось, стрик вырос.
+      Сворачивать бесполезно — таймер видит и ставит паузу.</span></div></div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="jp">結果</span>Было — стало</h2>
+  <table>
+    <tr><th></th><th>Было</th><th>Стало</th></tr>
+    <tr><td>Часов сидя без перерыва</td><td><b class="was">4–10 подряд</b></td>
+        <td><b class="now">максимум ~1 час</b></td></tr>
+    <tr><td>Движения за рабочий день</td><td><b class="was">≈ 0 минут</b></td>
+        <td><b class="now">18–30 минут, сами собой</b></td></tr>
+    <tr><td>Сила воли потрачена</td><td><b class="was">вся (и не хватило)</b></td>
+        <td><b class="now">ноль — решает шлагбаум</b></td></tr>
+    <tr><td>Напоминания закрыты кнопкой</td><td><b class="was">все</b></td>
+        <td><b class="now">закрывать нечего</b></td></tr>
+  </table>
+  <p class="note">Честно: продукту несколько дней, это данные первых пользователей, а не клиническое
+     исследование. Ровно поэтому вечером аппка сама спрашивает «как прошёл день» — мы собираем
+     настоящие «было/стало», и через месяц здесь будут цифры, а не обещания.</p>
+</section>
+
+<section>
+  <h2><span class="jp">始</span>Начать сейчас</h2>
+  <div class="install">
+    <div class="install-label">Одна команда — и агент начнёт заботиться о твоей спине</div>
+    <div class="cmd">
+      <code id="cmd2">/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/weinsteinsasha/taiso/main/get.sh)"</code>
+      <button onclick="navigator.clipboard.writeText(document.getElementById('cmd2').textContent).then(()=>{this.textContent='Скопировано ✓';setTimeout(()=>this.textContent='Скопировать',1500)})">Скопировать</button>
+    </div>
+  </div>
+  <p class="req">Передумал — <code style="font-family:var(--mono);font-size:12px">~/.radio-taiso/bin/uninstall.sh</code>
+     вернёт всё как было и не обидится.</p>
+</section>
+
+<footer>
+  <span class="jp">健康第一</span> — здоровье прежде всего<br>
+  Никакой камеры · никаких серверов · ноль сетевых вызовов в рантайме · всё локально<br>
+  MIT · сделано за выходные внутри Claude Code (который теперь сам отправляет автора на зарядку) ·
+  <a href="mailto:weinsteinsasha@gmail.com">фидбек</a>
+</footer>
+
 </main>
 </body>
 </html>
