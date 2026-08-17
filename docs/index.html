@@ -37,7 +37,7 @@
   .kanji-bg::after { content:"体操"; position:absolute; top:-30px; right:-10px;
       font-family:"Noto Serif JP",serif; font-size:120px; color:var(--ink);
       opacity:.05; pointer-events:none; line-height:1; }
-  .torii { font-size:56px; line-height:1; }
+  .torii { font-size:56px; line-height:1; margin-bottom:22px; }
   h1 { font-size:clamp(30px,5vw,46px); line-height:1.2; margin:18px 0 16px;
        letter-spacing:-.02em; font-weight:600; }
   h1 em { color:var(--vermilion); font-style:normal; }
@@ -97,7 +97,8 @@
   footer .jp { font-size:16px; color:var(--vermilion); }
   img.shot { width:100%; border-radius:14px; box-shadow:0 8px 40px rgba(38,35,30,.18);
       border:1px solid var(--line); margin-bottom:12px; }
-  @media (max-width:560px){ .fact-row{grid-template-columns:1fr;} .kanji-bg::after{display:none;} }
+  @media (max-width:560px){ .fact-row{grid-template-columns:1fr;} .kanji-bg::after{display:none;}
+    .cmd{flex-direction:column;align-items:stretch;} .cmd button{padding:13px;} }
 </style>
 </head>
 <body class="lang-ru">
