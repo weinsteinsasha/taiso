@@ -177,7 +177,7 @@ def process_turn(con, cfg, session_id, now=None):
         " WHERE id = 1", (charged, now))
     balance = con.execute(
         "SELECT balance_seconds FROM state WHERE id = 1").fetchone()[0]
-    allowed = 0 if balance <= -debt_limit else 1
+    allowed = compute_allowed(con, cfg, balance)
     con.execute(
         "INSERT INTO sessions (session_id, turn_allowed, updated_utc) VALUES (?, ?, ?)"
         " ON CONFLICT(session_id) DO UPDATE SET turn_allowed = ?, updated_utc = ?",
@@ -193,6 +193,24 @@ def process_turn(con, cfg, session_id, now=None):
     if not allowed:
         add_event(con, "block", {"balance": balance, "session": session_id[:16]})
     return balance, allowed
+
+
+def postponed_since_exercise(con):
+    """Был ли уже «долг по кнопке» после последней зарядки (раз за период)."""
+    row = con.execute(
+        "SELECT type FROM events WHERE type IN ('postpone', 'exercise_done')"
+        " ORDER BY id DESC LIMIT 1").fetchone()
+    return row is not None and row[0] == "postpone"
+
+
+def compute_allowed(con, cfg, balance):
+    """Блок на нуле; после разовой кнопки долга — блок на −debt_limit."""
+    debt_limit = int(cfg["debt_limit_minutes"] * 60)
+    if balance > 0:
+        return 1
+    if postponed_since_exercise(con) and balance > -debt_limit:
+        return 1
+    return 0
 
 
 def required_exercise_seconds(cfg, balance):
@@ -247,6 +265,11 @@ def hook_prompt():
                       "End every reply with this line on its own: %s" % (line, line))
         else:
             req = required_exercise_seconds(cfg, balance)
+            can_postpone = not postponed_since_exercise(con)
+            hint_ru = (" Если оператору совсем некогда: в окне зарядки есть разовая "
+                       "кнопка «Взять в долг +20 мин»." if can_postpone else "")
+            hint_en = (" If the operator truly can't now: the exercise window has a "
+                       "one-time 'Borrow +20 min' button." if can_postpone else "")
             if ru:
                 print("[radio-taiso] РАБОТА ЗАБЛОКИРОВАНА: баланс движения оператора исчерпан "
                       "(долг {} мин). Инструменты недоступны, пока оператор не сделает зарядку "
@@ -255,7 +278,8 @@ def hook_prompt():
                       "Единственная разрешённая команда: Bash `{} go` — предложи запустить "
                       "зарядку ею. Не выполняй другую работу и не обещай её выполнить до зарядки. "
                       "Заканчивай ответ строкой: {}".format(
-                          abs(balance) // 60, req // 60, req % 60, unlock_cli(), line))
+                          abs(balance) // 60, req // 60, req % 60, unlock_cli(), line)
+                      + hint_ru)
             else:
                 print("[radio-taiso] WORK BLOCKED: the operator's movement balance is spent "
                       "(debt {} min). Tools are unavailable until the operator does the "
@@ -264,7 +288,8 @@ def hook_prompt():
                       "allowed command is Bash `{} go` — offer to start the exercise with it. "
                       "Do not perform or promise other work before the exercise. "
                       "End your reply with: {}".format(
-                          abs(balance) // 60, req // 60, req % 60, unlock_cli(), line))
+                          abs(balance) // 60, req // 60, req % 60, unlock_cli(), line)
+                      + hint_en)
         con.close()
     except Exception as e:  # fail-open всегда
         log_error("hook_prompt: %r" % e)
@@ -405,13 +430,13 @@ def cmd_status(one_line=False):
     con = connect()
     balance, last = con.execute(
         "SELECT balance_seconds, last_activity_utc FROM state WHERE id = 1").fetchone()
-    con.close()
     # живой каунтдаун: прогноз с учётом натёкшего с последней активности
     gap = int(time.time()) - last
     if 0 < gap < int(cfg["idle_gap_minutes"] * 60):
         balance -= gap
     debt_limit = int(cfg["debt_limit_minutes"] * 60)
-    allowed = 0 if balance <= -debt_limit else 1
+    allowed = compute_allowed(con, cfg, balance)
+    con.close()
     line = balance_line(cfg, balance, allowed)
     if one_line:
         print(line)
@@ -535,6 +560,29 @@ def main():
         with open(config_path(), "w") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
         print("%s = %s" % (key, num))
+    elif cmd == "postpone":
+        cfg = load_config()
+        con = connect()
+        balance = con.execute(
+            "SELECT balance_seconds FROM state WHERE id = 1").fetchone()[0]
+        if balance > 0:
+            print("no-need")
+        elif postponed_since_exercise(con):
+            print("already-used")
+        else:
+            add_event(con, "postpone", {"balance": balance})
+            con.execute("BEGIN IMMEDIATE")
+            con.execute("UPDATE sessions SET turn_allowed = 1")
+            con.commit()
+            print("ok")
+        con.close()
+    elif cmd == "postpone-available":
+        cfg = load_config()
+        con = connect()
+        balance = con.execute(
+            "SELECT balance_seconds FROM state WHERE id = 1").fetchone()[0]
+        print("yes" if balance <= 0 and not postponed_since_exercise(con) else "no")
+        con.close()
     elif cmd == "config-set-lang":
         value = args[1]
         if value not in ("en", "ru"):

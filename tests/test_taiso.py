@@ -102,17 +102,39 @@ class TestEconomy(Base):
         con.close()
         self.assertEqual(b, cfg["free_morning_minutes"] * 60)  # ничего не списано
 
-    def test_block_at_debt_limit(self):
+    def test_block_at_zero_without_postpone(self):
         cfg = taiso.load_config()
         con = self.con()
         now = time.time()
         taiso.process_turn(con, cfg, "s", now=now)
-        con.execute("UPDATE state SET balance_seconds = ?",
-                    (-cfg["debt_limit_minutes"] * 60,))
+        con.execute("UPDATE state SET balance_seconds = -1")
         con.commit()
         _, allowed = taiso.process_turn(con, cfg, "s", now=now + 1)
         con.close()
+        self.assertEqual(allowed, 0)  # без кнопки долга блок сразу на нуле
+
+    def test_postpone_once_per_period(self):
+        cfg = taiso.load_config()
+        con = self.con()
+        now = time.time()
+        taiso.process_turn(con, cfg, "s", now=now)
+        con.execute("UPDATE state SET balance_seconds = -1")
+        con.commit()
+        # долг по кнопке: разрешает работу до -debt_limit
+        taiso.add_event(con, "postpone", {})
+        _, allowed = taiso.process_turn(con, cfg, "s", now=now + 1)
+        self.assertEqual(allowed, 1)
+        self.assertTrue(taiso.postponed_since_exercise(con))
+        # на -debt_limit блок даже с использованным долгом
+        con.execute("UPDATE state SET balance_seconds = ?",
+                    (-cfg["debt_limit_minutes"] * 60,))
+        con.commit()
+        _, allowed = taiso.process_turn(con, cfg, "s", now=now + 2)
         self.assertEqual(allowed, 0)
+        # после зарядки период сбрасывается — кнопка снова доступна
+        taiso.add_event(con, "exercise_done", {})
+        self.assertFalse(taiso.postponed_since_exercise(con))
+        con.close()
 
     def test_midflight_other_session_not_blocked(self):
         """Eng-ревью п.1: сессия B с живым ходом не блокируется блоком A."""
@@ -120,7 +142,7 @@ class TestEconomy(Base):
         con = self.con()
         now = time.time()
         taiso.process_turn(con, cfg, "B", now=now)  # B начала ход при живом балансе
-        con.execute("UPDATE state SET balance_seconds = -999999")
+        con.execute("UPDATE state SET balance_seconds = -1")
         con.commit()
         taiso.process_turn(con, cfg, "A", now=now + 1)  # A упёрлась в блок
         rows = dict(con.execute("SELECT session_id, turn_allowed FROM sessions"))

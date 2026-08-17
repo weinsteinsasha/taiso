@@ -77,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var progressLabel: NSTextField!
     var lastSavedPos = 0.0
     var timerOnlyMode = false
+    var finished = false
 
     func applicationDidFinishLaunching(_ n: Notification) {
         if let r = Double(runTaiso(["exercise-required"])), r > 0 { required = r }
@@ -108,9 +109,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NotificationCenter.default.addObserver(
                 forName: .AVPlayerItemDidPlayToEndTime, object: item,
                 queue: .main) { [weak self] _ in
-                // видео короче требуемого (долг) — заводим заново
-                p.seek(to: .zero); p.play()
-                _ = self // keep
+                guard let s = self else { return }
+                // хвост долга ≤15 сек не заслуживает повтора ролика — зачёт сразу
+                if s.required - s.accrued <= 15 {
+                    s.finish()
+                } else {
+                    p.seek(to: .zero); p.play()
+                }
             }
         } else {
             timerOnlyMode = true // деградация: видео нет — просто таймер (W3)
@@ -124,6 +129,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         progressLabel = label("", size: 28, color: .white)
         content.addSubview(progressLabel)
         layoutLabels(in: content.bounds)
+
+        // кнопка «взять в долг» — только при блоке и один раз за период
+        if runTaiso(["postpone-available"]) == "yes" {
+            let btn = NSButton(
+                title: L("Borrow +20 min — exercise later (×1.5)",
+                         "Взять в долг +20 мин — сделаю позже (×1.5)"),
+                target: self, action: #selector(postponePressed))
+            btn.bezelStyle = .rounded
+            btn.controlSize = .large
+            btn.frame = NSRect(x: content.bounds.midX - 190,
+                               y: content.bounds.height - 90, width: 380, height: 44)
+            btn.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
+            content.addSubview(btn)
+        }
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -172,11 +191,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if accrued >= required {
-            timer?.invalidate()
-            _ = runTaiso(["exercise-done", "--duration", String(Int(accrued))])
-            releaseLock()
-            NSApp.terminate(nil)
+            finish()
         }
+    }
+
+    func finish() {
+        guard !finished else { return }
+        finished = true
+        timer?.invalidate()
+        _ = runTaiso(["exercise-done", "--duration", String(Int(accrued))])
+        accrued = required // чтобы willTerminate не записал abort
+        releaseLock()
+        NSApp.terminate(nil)
+    }
+
+    @objc func postponePressed() {
+        _ = runTaiso(["postpone"])
+        let pos = player?.currentTime().seconds ?? 0
+        _ = runTaiso(["exercise-abort", "--position", String(format: "%.1f", pos)])
+        accrued = required // не дублировать abort в willTerminate
+        finished = true
+        releaseLock()
+        NSApp.terminate(nil)
     }
 
     func applicationWillTerminate(_ n: Notification) {
@@ -231,10 +267,8 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func startExercise() {
-        let bin = taisoDir + "/bin/TaisoWindow"
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: bin)
-        try? p.run() // отдельный процесс; PID-lock сам разрулит дубликаты
+        // тот же путь, что у `taiso go`: python-спавн с setsid — надёжный detach
+        _ = runTaiso(["go"])
     }
 
     @objc func setLangItem(_ sender: NSMenuItem) {
