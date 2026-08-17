@@ -26,9 +26,10 @@ DEFAULT_CONFIG = {
     "debt_limit_minutes": 20,
     "debt_penalty_seconds_per_minute": 4.5,
     "free_morning_minutes": 40,
-    "idle_gap_minutes": 5,
+    "idle_gap_minutes": 15,
     "video_path": "",  # install.sh заполняет абсолютным путём внутри TAISO_DIR
     "video_url": "https://www.youtube.com/watch?v=UVwKbfYlJUM",
+    "lang": "en",  # "en" | "ru" — язык menubar, окна и статус-строк
 }
 CONFIG_BOUNDS = {  # (min, max) — отрицательные/дикие значения не должны ломать экономику
     "work_minutes_per_exercise": (5, 480),
@@ -199,13 +200,23 @@ def required_exercise_seconds(cfg, balance):
     return int(cfg["exercise_seconds"] + cfg["debt_penalty_seconds_per_minute"] * debt_min)
 
 
+def lang(cfg):
+    return "ru" if cfg.get("lang") == "ru" else "en"
+
+
 def balance_line(cfg, balance, allowed):
     mins = balance // 60
+    if lang(cfg) == "ru":
+        if not allowed:
+            return "⛩ БЛОК — скажи «давай зарядку»"
+        if balance < 0:
+            return "⛩ −%d мин ДОЛГ" % (abs(balance) // 60)
+        return "⛩ %d мин" % mins
     if not allowed:
-        return "⛩ БЛОК — скажи «давай зарядку»"
+        return "⛩ BLOCKED — say “start exercise”"
     if balance < 0:
-        return "⛩ −%d мин ДОЛГ" % (abs(balance) // 60)
-    return "⛩ %d мин" % mins
+        return "⛩ −%d min DEBT" % (abs(balance) // 60)
+    return "⛩ %d min" % mins
 
 
 # ---------------------------------------------------------------- hooks
@@ -226,19 +237,34 @@ def hook_prompt():
         con = connect()
         balance, allowed = process_turn(con, cfg, session_id)
         line = balance_line(cfg, balance, allowed)
+        ru = lang(cfg) == "ru"
         if allowed:
-            print("[radio-taiso] Баланс оператора: %s. "
-                  "Заканчивай каждый свой ответ отдельной строкой: %s" % (line, line))
+            if ru:
+                print("[radio-taiso] Баланс оператора: %s. "
+                      "Заканчивай каждый свой ответ отдельной строкой: %s" % (line, line))
+            else:
+                print("[radio-taiso] Operator balance: %s. "
+                      "End every reply with this line on its own: %s" % (line, line))
         else:
             req = required_exercise_seconds(cfg, balance)
-            print("[radio-taiso] РАБОТА ЗАБЛОКИРОВАНА: баланс движения оператора исчерпан "
-                  "(долг {} мин). Инструменты недоступны, пока оператор не сделает зарядку "
-                  "Radio Taiso ({}:{:02d}). Твоя задача: доброжелательно, своими словами, с "
-                  "привязкой к текущей работе предложить размяться прямо сейчас. "
-                  "Единственная разрешённая команда: Bash `{} go` — предложи запустить "
-                  "зарядку ею. Не выполняй другую работу и не обещай её выполнить до зарядки. "
-                  "Заканчивай ответ строкой: {}".format(
-                      abs(balance) // 60, req // 60, req % 60, unlock_cli(), line))
+            if ru:
+                print("[radio-taiso] РАБОТА ЗАБЛОКИРОВАНА: баланс движения оператора исчерпан "
+                      "(долг {} мин). Инструменты недоступны, пока оператор не сделает зарядку "
+                      "Radio Taiso ({}:{:02d}). Твоя задача: доброжелательно, своими словами, с "
+                      "привязкой к текущей работе предложить размяться прямо сейчас. "
+                      "Единственная разрешённая команда: Bash `{} go` — предложи запустить "
+                      "зарядку ею. Не выполняй другую работу и не обещай её выполнить до зарядки. "
+                      "Заканчивай ответ строкой: {}".format(
+                          abs(balance) // 60, req // 60, req % 60, unlock_cli(), line))
+            else:
+                print("[radio-taiso] WORK BLOCKED: the operator's movement balance is spent "
+                      "(debt {} min). Tools are unavailable until the operator does the "
+                      "Radio Taiso exercise ({}:{:02d}). Your job: kindly, in your own words, "
+                      "tied to the current work, invite them to move right now. The only "
+                      "allowed command is Bash `{} go` — offer to start the exercise with it. "
+                      "Do not perform or promise other work before the exercise. "
+                      "End your reply with: {}".format(
+                          abs(balance) // 60, req // 60, req % 60, unlock_cli(), line))
         con.close()
     except Exception as e:  # fail-open всегда
         log_error("hook_prompt: %r" % e)
@@ -301,14 +327,18 @@ def hook_tool():
             cmd = (inp.get("tool_input") or {}).get("command", "")
             if is_unlock_command(cmd):
                 sys.exit(0)
+        reason_ru = ("radio-taiso: работа заблокирована до зарядки. Единственная "
+                     "разрешённая команда — ровно `%s go` (без пайпов и цепочек). "
+                     "Предложи оператору запустить её." % unlock_cli())
+        reason_en = ("radio-taiso: work is blocked until the exercise is done. The only "
+                     "allowed command is exactly `%s go` (no pipes or chains). "
+                     "Offer the operator to run it." % unlock_cli())
         print(json.dumps({
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
                 "permissionDecisionReason":
-                    "radio-taiso: работа заблокирована до зарядки. Единственная "
-                    "разрешённая команда — ровно `%s go` (без пайпов и цепочек). "
-                    "Предложи оператору запустить её." % unlock_cli(),
+                    reason_ru if lang(load_config()) == "ru" else reason_en,
             }
         }))
     except Exception as e:
@@ -387,15 +417,19 @@ def cmd_status(one_line=False):
         print(line)
         return
     print(line)
+    ru = lang(cfg) == "ru"
+    req = required_exercise_seconds(cfg, balance)
     if balance > 0:
-        print("До нуля: %d мин активной работы." % (balance // 60))
+        print("До нуля: %d мин активной работы." % (balance // 60) if ru
+              else "%d min of active work until zero." % (balance // 60))
     elif allowed:
         print("Долг %d из %d мин. Следующая зарядка: %d сек."
-              % (abs(balance) // 60, debt_limit // 60,
-                 required_exercise_seconds(cfg, balance)))
+              % (abs(balance) // 60, debt_limit // 60, req) if ru
+              else "Debt %d of %d min. Next exercise: %d sec."
+              % (abs(balance) // 60, debt_limit // 60, req))
     else:
-        print("Заблокировано. Разблокировка: taiso go (%d сек зарядки)."
-              % required_exercise_seconds(cfg, balance))
+        print("Заблокировано. Разблокировка: taiso go (%d сек зарядки)." % req if ru
+              else "Blocked. Unlock: taiso go (%d sec of exercise)." % req)
 
 
 def cmd_go():
@@ -407,7 +441,9 @@ def cmd_go():
     subprocess.Popen([window], start_new_session=True,
                      stdin=subprocess.DEVNULL,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print("Зарядка запущена — окно открывается. Встань, отойди на шаг от стола.")
+    print("Зарядка запущена — окно открывается. Встань, отойди на шаг от стола."
+          if lang(load_config()) == "ru" else
+          "Exercise started — the window is opening. Stand up, step away from the desk.")
 
 
 def _day_of(ts):
@@ -439,12 +475,17 @@ def cmd_stats(report=False):
         d -= datetime.timedelta(days=1)
     honest = (100 * done_week // (done_week + aborts_week)) \
         if (done_week + aborts_week) else 100
+    ru = lang(load_config()) == "ru"
     print("Зарядок сегодня: %d · за неделю: %d · стрик: %d дн. · "
-          "завершено без обрыва: %d%%" % (done_today, done_week, streak, honest))
+          "завершено без обрыва: %d%%" % (done_today, done_week, streak, honest) if ru
+          else "Exercises today: %d · this week: %d · streak: %d d · "
+          "completed without abort: %d%%" % (done_today, done_week, streak, honest))
     if report:
         blocks_week = sum(1 for ts, t, _ in rows if t == "block" and ts >= week_ago)
         recreated = sum(1 for _, t, _ in rows if t == "db_recreated")
-        print("Блокировок за неделю: %d · пересозданий базы: %d" % (blocks_week, recreated))
+        print("Блокировок за неделю: %d · пересозданий базы: %d" % (blocks_week, recreated)
+              if ru else
+              "Blocks this week: %d · db recreations: %d" % (blocks_week, recreated))
 
 
 def main():

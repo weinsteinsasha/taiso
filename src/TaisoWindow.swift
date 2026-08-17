@@ -44,6 +44,16 @@ func acquireLock() -> Bool {
 
 func releaseLock() { try? fm.removeItem(atPath: lockPath) }
 
+// --- локализация: "lang" из config.json ("en" | "ru"), дефолт en
+func cfgLang() -> String {
+    guard let data = fm.contents(atPath: taisoDir + "/config.json"),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let l = json["lang"] as? String else { return "en" }
+    return l == "ru" ? "ru" : "en"
+}
+
+func L(_ en: String, _ ru: String) -> String { cfgLang() == "ru" ? ru : en }
+
 // --- конфиг: путь к видео с realpath-проверкой внутри taisoDir (security 6)
 func videoURL() -> URL? {
     guard let data = fm.contents(atPath: taisoDir + "/config.json"),
@@ -106,7 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             timerOnlyMode = true // деградация: видео нет — просто таймер (W3)
         }
 
-        pausedLabel = label("ПАУЗА — вернись в окно, видео должно играть",
+        pausedLabel = label(L("PAUSED — come back, the video must be playing",
+                              "ПАУЗА — вернись в окно, видео должно играть"),
                             size: 44, color: .systemRed)
         pausedLabel.isHidden = true
         content.addSubview(pausedLabel)
@@ -151,7 +162,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         pausedLabel.isHidden = accruing
         let left = max(0, Int(required - accrued))
-        progressLabel.stringValue = String(format: "Осталось %d:%02d", left / 60, left % 60)
+        progressLabel.stringValue = String(
+            format: L("%d:%02d left", "Осталось %d:%02d"), left / 60, left % 60)
 
         // позиция каждые 5 сек — resume после прерывания
         if let t = player?.currentTime().seconds, t - lastSavedPos >= 5 {
@@ -239,7 +251,7 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "⛩ Radio Taiso"
-        alert.informativeText = """
+        let storyRU = """
         Привет! Я Саша, и я папа.
 
         За последнее время моя жизнь сильно изменилась: я начал клодкодить. С марта я каждый \
@@ -259,9 +271,29 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
 
         — Саша Вайнштейн
         """
-        alert.addButton(withTitle: "Открыть сайт")
-        alert.addButton(withTitle: "Мой LinkedIn")
-        alert.addButton(withTitle: "Закрыть")
+        let storyEN = """
+        Hi! I'm Sasha, and I'm a dad.
+
+        My life has changed a lot recently: I started Claude-coding. Since March I've been \
+        spending ten to twelve hours a day inside Claude Code — you can't tear yourself away \
+        from an agent: it's always finishing something up, and you're always "almost done."
+
+        In those six months I grew a belly and my back got weak. I developed the classic \
+        programmer problems I'd never had — because I had never been a programmer.
+
+        I set up parental controls for my kid: screen time, limits, all of it. And none for \
+        myself. Only one thing helped: giving the controls to the thing I can't quit. Now my \
+        agent is my parental control. Claude won't work until I've done the three-minute \
+        Japanese routine Japan has broadcast every morning since 1928.
+
+        It was time.
+
+        — Sasha Weinstein
+        """
+        alert.informativeText = L(storyEN, storyRU)
+        alert.addButton(withTitle: L("Open website", "Открыть сайт"))
+        alert.addButton(withTitle: L("My LinkedIn", "Мой LinkedIn"))
+        alert.addButton(withTitle: L("Close", "Закрыть"))
         let resp = alert.runModal()
         if resp == .alertFirstButtonReturn,
            let url = URL(string: "https://weinsteinsasha.github.io/taiso/") {
@@ -293,11 +325,14 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
     func showFeedbackDialog(auto: Bool) {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = auto ? "Как прошёл день с Radio Taiso?"
-                                 : "Фидбек по Radio Taiso"
-        alert.informativeText =
+        alert.messageText = auto
+            ? L("How was your day with Radio Taiso?", "Как прошёл день с Radio Taiso?")
+            : L("Radio Taiso feedback", "Фидбек по Radio Taiso")
+        alert.informativeText = L(
+            "A couple of lines: what annoyed you, what clicked, what's missing. " +
+            "It goes to Sasha by email (your mail app opens — just hit send).",
             "Пара строк: что бесило, что зашло, чего не хватает. " +
-            "Улетит Саше письмом (откроется почта — просто нажми отправить)."
+            "Улетит Саше письмом (откроется почта — просто нажми отправить).")
         let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 420, height: 110))
         tv.font = .systemFont(ofSize: 13)
         tv.isRichText = false
@@ -305,8 +340,9 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
         scroll.documentView = tv
         scroll.hasVerticalScroller = true
         alert.accessoryView = scroll
-        alert.addButton(withTitle: "Отправить")
-        alert.addButton(withTitle: auto ? "Не сегодня" : "Отмена")
+        alert.addButton(withTitle: L("Send", "Отправить"))
+        alert.addButton(withTitle: auto ? L("Not today", "Не сегодня")
+                                        : L("Cancel", "Отмена"))
         alert.window.initialFirstResponder = tv
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let text = tv.string.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -338,22 +374,24 @@ extension MenubarDelegate: NSMenuDelegate {
         // watchdog: hooks молчат при работающем компе (eng-ревью п.11)
         if let silent = Int(runTaiso(["watchdog"])), silent > 6 * 3600 {
             let it = NSMenuItem(
-                title: "⚠️ Hooks молчат \(silent / 3600) ч — проверь установку",
+                title: L("⚠️ Hooks silent for \(silent / 3600) h — check the install",
+                         "⚠️ Hooks молчат \(silent / 3600) ч — проверь установку"),
                 action: nil, keyEquivalent: "")
             it.isEnabled = false
             menu.addItem(it)
         }
         menu.addItem(.separator())
-        let go = NSMenuItem(title: "Зарядка сейчас", action: #selector(startExercise),
-                            keyEquivalent: "g")
+        let go = NSMenuItem(title: L("Exercise now", "Зарядка сейчас"),
+                            action: #selector(startExercise), keyEquivalent: "g")
         go.target = self
         menu.addItem(go)
-        let intervals = NSMenuItem(title: "Интервал", action: nil, keyEquivalent: "")
+        let intervals = NSMenuItem(title: L("Interval", "Интервал"),
+                                   action: nil, keyEquivalent: "")
         let sub = NSMenu()
         let current = Int(runTaiso(["config-get-interval"])) ?? 0
         for v in [40, 50, 60, 90] {
-            let it = NSMenuItem(title: "\(v) минут", action: #selector(setInterval(_:)),
-                                keyEquivalent: "")
+            let it = NSMenuItem(title: L("\(v) minutes", "\(v) минут"),
+                                action: #selector(setInterval(_:)), keyEquivalent: "")
             it.target = self
             it.tag = v
             if v == current { it.state = .on }
@@ -361,16 +399,16 @@ extension MenubarDelegate: NSMenuDelegate {
         }
         intervals.submenu = sub
         menu.addItem(intervals)
-        let fb = NSMenuItem(title: "Оставить фидбек…", action: #selector(giveFeedback),
-                            keyEquivalent: "f")
+        let fb = NSMenuItem(title: L("Leave feedback…", "Оставить фидбек…"),
+                            action: #selector(giveFeedback), keyEquivalent: "f")
         fb.target = self
         menu.addItem(fb)
-        let about = NSMenuItem(title: "О проекте", action: #selector(showAbout),
-                               keyEquivalent: "")
+        let about = NSMenuItem(title: L("About", "О проекте"),
+                               action: #selector(showAbout), keyEquivalent: "")
         about.target = self
         menu.addItem(about)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Выйти", action:
+        menu.addItem(NSMenuItem(title: L("Quit", "Выйти"), action:
             #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 }
