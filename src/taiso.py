@@ -535,6 +535,18 @@ def main():
         with open(config_path(), "w") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
         print("%s = %s" % (key, num))
+    elif cmd == "config-set-lang":
+        value = args[1]
+        if value not in ("en", "ru"):
+            print("en | ru")
+            sys.exit(1)
+        cfg = load_config()
+        cfg["lang"] = value
+        with open(config_path(), "w") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        print("lang = %s" % value)
+    elif cmd == "config-get-lang":
+        print(lang(load_config()))
     elif cmd == "config-get-interval":
         print(int(load_config()["work_minutes_per_exercise"]))
     elif cmd == "watchdog":

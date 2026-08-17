@@ -237,6 +237,13 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
         try? p.run() // отдельный процесс; PID-lock сам разрулит дубликаты
     }
 
+    @objc func setLangItem(_ sender: NSMenuItem) {
+        if let code = sender.representedObject as? String {
+            _ = runTaiso(["config-set-lang", code])
+            refresh()
+        }
+    }
+
     @objc func setInterval(_ sender: NSMenuItem) {
         _ = runTaiso(["config-set", "work_minutes_per_exercise",
                       String(sender.tag)])
@@ -399,6 +406,19 @@ extension MenubarDelegate: NSMenuDelegate {
         }
         intervals.submenu = sub
         menu.addItem(intervals)
+        let langItem = NSMenuItem(title: "Language / Язык", action: nil, keyEquivalent: "")
+        let langSub = NSMenu()
+        let curLang = cfgLang()
+        for (code, title) in [("en", "English"), ("ru", "Русский")] {
+            let it = NSMenuItem(title: title, action: #selector(setLangItem(_:)),
+                                keyEquivalent: "")
+            it.target = self
+            it.representedObject = code
+            if code == curLang { it.state = .on }
+            langSub.addItem(it)
+        }
+        langItem.submenu = langSub
+        menu.addItem(langItem)
         let fb = NSMenuItem(title: L("Leave feedback…", "Оставить фидбек…"),
                             action: #selector(giveFeedback), keyEquivalent: "f")
         fb.target = self
