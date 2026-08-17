@@ -235,6 +235,32 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(URL(fileURLWithPath: taisoDir + "/config.json"))
     }
 
+    @objc func showAbout() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "⛩ Radio Taiso"
+        alert.informativeText = """
+        Я ставлю ребёнку родительский контроль: экранное время, лимиты, всё как положено. \
+        А себе — нет. Хотя сижу с Claude Code по десять часов: от агента невозможно \
+        оторваться — он всё время что-то дописывает, и ты всё время «почти закончил».
+
+        За полгода такой жизни начал расти живот, мышцы поехали, спина стала напоминать \
+        о себе по утрам. Таймеры и напоминалки я закрывал не глядя — как и все, кого я спросил.
+
+        Помогло единственное: отдать контроль тому, от кого не оторваться. Теперь мой агент — \
+        мой родительский контроль. Клод не работает, пока я не сделаю трёхминутную японскую \
+        зарядку — ту самую, которую Япония делает каждое утро с 1928 года.
+
+        Пришло время. — Саша
+        """
+        alert.addButton(withTitle: "Открыть сайт")
+        alert.addButton(withTitle: "Закрыть")
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: "https://weinsteinsasha.github.io/taiso/") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     // --- фидбек: вручную из меню + автопромпт раз в день после 20:00 ---
     @objc func giveFeedback() { showFeedbackDialog(auto: false) }
 
@@ -328,6 +354,10 @@ extension MenubarDelegate: NSMenuDelegate {
                             keyEquivalent: "f")
         fb.target = self
         menu.addItem(fb)
+        let about = NSMenuItem(title: "О проекте", action: #selector(showAbout),
+                               keyEquivalent: "")
+        about.target = self
+        menu.addItem(about)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Выйти", action:
             #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
