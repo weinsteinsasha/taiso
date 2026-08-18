@@ -168,6 +168,12 @@ if [ $RC -ne 0 ]; then
   exit $RC
 fi
 
+# --- 7.4 Codex: если стоит — включаем адаптер автоматически (opt-out: taiso disable-codex)
+if command -v codex >/dev/null 2>&1; then
+  TAISO_DIR="$TAISO_DIR" "$PY" "$TAISO_DIR/bin/taiso.py" enable-codex && \
+    echo "Codex: адаптер включён автоматически (отключить: taiso disable-codex)"
+fi
+
 # --- 7.5 Menubar: LaunchAgent (автозапуск при логине) + запуск сейчас
 LA_DIR="$HOME/Library/LaunchAgents"
 LA_PLIST="$LA_DIR/cy.radio-taiso.menubar.plist"
