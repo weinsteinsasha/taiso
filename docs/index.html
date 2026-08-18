@@ -393,6 +393,23 @@
 </section>
 
 <section>
+  <h2><span class="jp">信</span><span class="ru">«Выполнить чужой скрипт? Это же может быть вирус»</span><span class="en">"Run someone's script? Could be malware"</span></h2>
+  <p style="font-size:16.5px;margin-bottom:14px"><span class="ru">Правильный рефлекс. Поэтому — полная прозрачность:</span>
+     <span class="en">That's the right instinct. So here's full transparency:</span></p>
+  <div class="steps">
+    <div class="step"><div><b><span class="ru">Код открыт целиком</span><span class="en">The code is fully open</span></b>
+      <span><span class="ru">Установщик — <a href="https://github.com/weinsteinsasha/taiso/blob/main/install.sh" style="color:var(--indigo)">один читаемый файл</a>: скачивает видео, кладёт файлы в <code>~/.radio-taiso/</code>, добавляет две строки в настройки Claude Code (с бэкапом). Всё.</span>
+      <span class="en">The installer is <a href="https://github.com/weinsteinsasha/taiso/blob/main/install.sh" style="color:var(--indigo)">one readable file</a>: downloads the video, puts files in <code>~/.radio-taiso/</code>, adds two lines to Claude Code settings (with a backup). That's all.</span></span></div></div>
+    <div class="step"><div><b><span class="ru">Не доверяешь однострочнику — не запускай</span><span class="en">Don't trust one-liners? Don't run one</span></b>
+      <span><span class="ru">Путь параноика (уважаем): <code>git clone https://github.com/weinsteinsasha/taiso</code> → прочитай глазами → <code>./install.sh</code> сам.</span>
+      <span class="en">The paranoid path (respect): <code>git clone https://github.com/weinsteinsasha/taiso</code> → read it yourself → run <code>./install.sh</code>.</span></span></div></div>
+    <div class="step"><div><b><span class="ru">Ноль сети в рантайме — проверяемо</span><span class="en">Zero network at runtime — verifiable</span></b>
+      <span><span class="ru">После установки ни одного сетевого вызова: <code>grep -r "urllib\|requests\|http" ~/.radio-taiso/bin/taiso.py</code> — пусто. Статистика не покидает твой Mac.</span>
+      <span class="en">After install, not a single network call: <code>grep -r "urllib\|requests\|http" ~/.radio-taiso/bin/taiso.py</code> — empty. Your stats never leave your Mac.</span></span></div></div>
+  </div>
+</section>
+
+<section>
   <h2><span class="jp">結果</span><span class="ru">Было — стало</span><span class="en">Before — after</span></h2>
   <table>
     <tr><th></th><th><span class="ru">Было</span><span class="en">Before</span></th><th><span class="ru">Стало</span><span class="en">After</span></th></tr>

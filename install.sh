@@ -27,6 +27,8 @@ cp "$REPO_DIR/statusline.sh" "$TAISO_DIR/bin/statusline.sh"
 chmod 755 "$TAISO_DIR/bin/statusline.sh"
 cp "$REPO_DIR/uninstall.sh" "$TAISO_DIR/bin/uninstall.sh"
 chmod 755 "$TAISO_DIR/bin/uninstall.sh"
+cp "$REPO_DIR/src/codex-shim.sh" "$TAISO_DIR/bin/codex-shim.sh" 2>/dev/null || true
+chmod 755 "$TAISO_DIR/bin/codex-shim.sh" 2>/dev/null || true
 
 # CLI `taiso` в PATH (для Клода и терминала)
 cat > "$TAISO_DIR/bin/taiso" <<EOF

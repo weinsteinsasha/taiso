@@ -30,6 +30,7 @@ DEFAULT_CONFIG = {
     "video_path": "",  # install.sh заполняет абсолютным путём внутри TAISO_DIR
     "video_url": "https://www.youtube.com/watch?v=UVwKbfYlJUM",
     "lang": "en",  # "en" | "ru" — язык menubar, окна и статус-строк
+    "count_all_apps": True,  # учёт активности во всех приложениях (menubar-тикер)
 }
 CONFIG_BOUNDS = {  # (min, max) — отрицательные/дикие значения не должны ломать экономику
     "work_minutes_per_exercise": (5, 480),
@@ -560,6 +561,54 @@ def main():
         with open(config_path(), "w") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
         print("%s = %s" % (key, num))
+    elif cmd == "enable-codex":
+        # обёртка codex: блок на старте сессии + тикер активности
+        import shutil as _sh
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "codex-shim.sh")
+        dst = os.path.join(taiso_dir(), "bin", "codex")
+        _sh.copyfile(src, dst)
+        os.chmod(dst, 0o755)
+        marker = "# radio-taiso codex adapter"
+        rc = os.path.expanduser("~/.zshrc")
+        line = '%s\nexport PATH="$HOME/.radio-taiso/bin:$PATH"\n' % marker
+        try:
+            content = open(rc).read() if os.path.exists(rc) else ""
+            if marker not in content:
+                with open(rc, "a") as f:
+                    f.write("\n" + line)
+        except OSError:
+            pass
+        print("Codex adapter on. Перезапусти терминал (или source ~/.zshrc).")
+    elif cmd == "disable-codex":
+        try:
+            os.remove(os.path.join(taiso_dir(), "bin", "codex"))
+        except OSError:
+            pass
+        print("Codex adapter off.")
+    elif cmd == "ping-activity":
+        # для обёрток (Codex и др.): тикер активности раз в минуту
+        cfg = load_config()
+        con = connect()
+        charge_activity(con, cfg)
+        con.close()
+    elif cmd == "gate":
+        # для обёрток: 0 = работать можно, 1 = блок (зарядка)
+        cfg = load_config()
+        con = connect()
+        balance = con.execute(
+            "SELECT balance_seconds FROM state WHERE id = 1").fetchone()[0]
+        allowed = compute_allowed(con, cfg, balance)
+        con.close()
+        if not allowed:
+            req = required_exercise_seconds(cfg, balance)
+            ru = lang(cfg) == "ru"
+            print(("⛩ Radio Taiso: баланс движения исчерпан. Зарядка %d:%02d — "
+                   "и работаем дальше. Запускаю окно…" if ru else
+                   "⛩ Radio Taiso: movement balance spent. Exercise %d:%02d — "
+                   "then back to work. Opening the window…")
+                  % (req // 60, req % 60))
+            sys.exit(1)
+        sys.exit(0)
     elif cmd == "postpone":
         cfg = load_config()
         con = connect()

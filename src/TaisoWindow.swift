@@ -54,6 +54,13 @@ func cfgLang() -> String {
 
 func L(_ en: String, _ ru: String) -> String { cfgLang() == "ru" ? ru : en }
 
+func countAllApps() -> Bool {
+    guard let data = fm.contents(atPath: taisoDir + "/config.json"),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return true }
+    return (json["count_all_apps"] as? Bool) ?? true
+}
+
 // --- конфиг: путь к видео с realpath-проверкой внутри taisoDir (security 6)
 func videoURL() -> URL? {
     guard let data = fm.contents(atPath: taisoDir + "/config.json"),
@@ -241,6 +248,17 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
         }
         Timer.scheduledTimer(withTimeInterval: 600, repeats: true) {
             [weak self] _ in self?.maybeAutoFeedback()
+        }
+        // универсальный учёт: раз в минуту, если был ввод — тикаем баланс,
+        // независимо от приложения (config: count_all_apps)
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+            guard countAllApps() else { return }
+            let idle = [CGEventType.keyDown, .mouseMoved, .leftMouseDown,
+                        .scrollWheel].map {
+                CGEventSource.secondsSinceLastEventType(
+                    .combinedSessionState, eventType: $0)
+            }.min() ?? 9999
+            if idle < 60 { _ = runTaiso(["ping-activity"]) }
         }
         rebuildMenu()
     }
