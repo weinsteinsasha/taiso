@@ -662,7 +662,16 @@ def main():
                            " ORDER BY id DESC LIMIT 3").fetchall()
         con.close()
         print("events:", n, "| last:", "; ".join("%s@%s" % r for r in last))
-        print("Fix menubar manually: launchctl load %s" % la)
+        running = _sp.run(["pgrep", "-f", "TaisoWindow --menubar"],
+                          capture_output=True).returncode == 0
+        if running:
+            print("VERDICT: all good. If you don't see ⛩ by the clock — it's hidden "
+                  "behind the MacBook notch: quit a couple of other menubar apps "
+                  "(or use Bartender/Ice). Exercise now: taiso go")
+        else:
+            print("VERDICT: menubar is NOT running. Start it: "
+                  "launchctl bootstrap gui/$(id -u) %s  (or: %s/bin/TaisoWindow --menubar &)"
+                  % (la, d))
     elif cmd == "enable-codex":
         # обёртка codex: блок на старте сессии + тикер активности
         import shutil as _sh
