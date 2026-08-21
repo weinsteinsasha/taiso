@@ -10,6 +10,7 @@ Design: 03_design.md. Инварианты, которые нельзя нару
 import datetime
 import json
 import os
+import re
 import shlex
 import sqlite3
 import subprocess
@@ -31,6 +32,7 @@ DEFAULT_CONFIG = {
     "video_url": "https://www.youtube.com/watch?v=UVwKbfYlJUM",
     "lang": "en",  # "en" | "ru" — язык menubar, окна и статус-строк
     "count_all_apps": True,  # учёт активности во всех приложениях (menubar-тикер)
+    "feedback_prompt": True,  # вечерний диалог «как прошёл день» (menubar)
 }
 CONFIG_BOUNDS = {  # (min, max) — отрицательные/дикие значения не должны ломать экономику
     "work_minutes_per_exercise": (5, 480),
@@ -70,11 +72,16 @@ def load_config():
         for k, v in raw.items():
             if k not in cfg:
                 continue
-            if k in CONFIG_BOUNDS:
+            if isinstance(v, bool) and k in ("count_all_apps", "feedback_prompt"):
+                cfg[k] = v
+            elif k in CONFIG_BOUNDS:
                 lo, hi = CONFIG_BOUNDS[k]
                 if isinstance(v, (int, float)) and lo <= v <= hi:
                     cfg[k] = v
             elif isinstance(v, str):
+                if k == "video_url" and not re.match(
+                        r"^https://(www\.)?(youtube\.com|youtu\.be)/", v):
+                    continue
                 cfg[k] = v
     except (OSError, ValueError):
         pass  # дефолты
@@ -297,6 +304,28 @@ def hook_prompt():
     sys.exit(0)
 
 
+RC_MARKER = "# radio-taiso codex adapter"
+RC_LINE = 'export PATH="$HOME/.radio-taiso/shim:$PATH"'
+
+
+def rc_set_path(enable):
+    """PATH-строка шима: только в СУЩЕСТВУЮЩИХ rc-файлах; снятие — хирургическое."""
+    for rcname in ("~/.zshrc", "~/.bashrc"):
+        rc = os.path.expanduser(rcname)
+        if not os.path.exists(rc):
+            continue
+        try:
+            lines = open(rc).read().split("\n")
+            cleaned = [l for l in lines if l.strip() not in (RC_MARKER, RC_LINE)
+                       and not l.strip().startswith("export PATH=\"$HOME/.radio-taiso/")]
+            if enable:
+                cleaned += [RC_MARKER, RC_LINE]
+            with open(rc, "w") as f:
+                f.write("\n".join(cleaned).rstrip("\n") + "\n")
+        except OSError:
+            pass
+
+
 def unlock_cli():
     """Команда разблокировки для сообщений: bare `taiso`, если есть в PATH, иначе абсолютный путь."""
     import shutil
@@ -352,6 +381,20 @@ def hook_tool():
         if tool == "Bash":
             cmd = (inp.get("tool_input") or {}).get("command", "")
             if is_unlock_command(cmd):
+                # НЕ пропускаем в shell (там может быть подложенный `taiso`):
+                # окно открываем сами, фиксированным путём, и всё равно deny.
+                opened = spawn_window()
+                msg = ("radio-taiso: окно зарядки открыто — пусть оператор сделает "
+                       "Radio Taiso, потом продолжим." if lang(load_config()) == "ru" else
+                       "radio-taiso: exercise window opened — let the operator do "
+                       "Radio Taiso, then continue.") if opened else (
+                       "radio-taiso: окно зарядки не установлено (taiso doctor)."
+                       if lang(load_config()) == "ru" else
+                       "radio-taiso: exercise window not installed (taiso doctor).")
+                print(json.dumps({"hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": msg}}))
                 sys.exit(0)
         reason_ru = ("radio-taiso: работа заблокирована до зарядки. Единственная "
                      "разрешённая команда — ровно `%s go` (без пайпов и цепочек). "
@@ -458,15 +501,21 @@ def cmd_status(one_line=False):
               else "Blocked. Unlock: taiso go (%d sec of exercise)." % req)
 
 
-def cmd_go():
+def spawn_window():
+    """Запуск окна фиксированным путём, detached. True если бинарь есть."""
     window = os.path.join(taiso_dir(), "bin", "TaisoWindow")
     if not os.path.exists(window):
-        print("Окно зарядки не установлено (%s). Запусти install.sh." % window)
-        sys.exit(1)
-    # detached: переживает конец Bash-вызова и сессии
+        return False
     subprocess.Popen([window], start_new_session=True,
                      stdin=subprocess.DEVNULL,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return True
+
+
+def cmd_go():
+    if not spawn_window():
+        print("Окно зарядки не установлено. Запусти install.sh (taiso doctor).")
+        sys.exit(1)
     print("Зарядка запущена — окно открывается. Встань, отойди на шаг от стола."
           if lang(load_config()) == "ru" else
           "Exercise started — the window is opening. Stand up, step away from the desk.")
@@ -613,26 +662,19 @@ def main():
         # обёртка codex: блок на старте сессии + тикер активности
         import shutil as _sh
         src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "codex-shim.sh")
-        dst = os.path.join(taiso_dir(), "bin", "codex")
+        shim_dir = os.path.join(taiso_dir(), "shim")  # в PATH только этот каталог
+        os.makedirs(shim_dir, mode=0o700, exist_ok=True)
+        dst = os.path.join(shim_dir, "codex")
         _sh.copyfile(src, dst)
         os.chmod(dst, 0o755)
-        marker = "# radio-taiso codex adapter"
-        line = '%s\nexport PATH="$HOME/.radio-taiso/bin:$PATH"\n' % marker
-        for rcname in ("~/.zshrc", "~/.bashrc", "~/.bash_profile"):
-            rc = os.path.expanduser(rcname)
-            try:
-                content = open(rc).read() if os.path.exists(rc) else ""
-                if marker not in content:
-                    with open(rc, "a") as f:
-                        f.write("\n" + line)
-            except OSError:
-                pass
+        rc_set_path(True)
         print("Codex adapter on. Перезапусти терминал (или source ~/.zshrc).")
     elif cmd == "disable-codex":
         try:
-            os.remove(os.path.join(taiso_dir(), "bin", "codex"))
+            os.remove(os.path.join(taiso_dir(), "shim", "codex"))
         except OSError:
             pass
+        rc_set_path(False)
         print("Codex adapter off.")
     elif cmd == "ping-activity":
         # для обёрток (Codex и др.): тикер активности раз в минуту

@@ -23,13 +23,14 @@ fi
 
 # --- 2. settings.json: surgical удаление только своих записей
 if [ -f "$SETTINGS" ]; then
-  BACKUP="$SETTINGS.bak-$(date +%Y%m%d-%H%M%S)"
-  cp "$SETTINGS" "$BACKUP"
+  mkdir -p "$TAISO_DIR/backups" 2>/dev/null && chmod 700 "$TAISO_DIR/backups" 2>/dev/null
+  BACKUP="$TAISO_DIR/backups/settings.json.bak-$(date +%Y%m%d-%H%M%S)"
+  cp "$SETTINGS" "$BACKUP" && chmod 600 "$BACKUP"
   echo "Бэкап: $BACKUP"
   SETTINGS="$SETTINGS" "$PY" <<'PYEOF'
-import json, os, sys
+import json, os, sys, shutil
 
-path = os.environ["SETTINGS"]
+path = os.path.realpath(os.environ["SETTINGS"])
 settings = json.load(open(path))
 
 hooks = settings.get("hooks") or {}
@@ -51,6 +52,7 @@ tmp = path + ".tmp"
 with open(tmp, "w") as f:
     json.dump(settings, f, ensure_ascii=False, indent=2)
 json.load(open(tmp))
+shutil.copymode(path, tmp)
 os.replace(tmp, path)
 print("settings.json: записи radio-taiso удалены, чужие hooks не тронуты")
 PYEOF
@@ -58,7 +60,11 @@ fi
 
 # --- 3. PATH и LaunchAgent — ТОЛЬКО для боевого каталога (тесты с TAISO_DIR не трогают реальный агент)
 if [ "$TAISO_DIR" = "$HOME/.radio-taiso" ]; then
-  rm -f /usr/local/bin/taiso /opt/homebrew/bin/taiso 2>/dev/null || true
+  for p in /usr/local/bin/taiso /opt/homebrew/bin/taiso; do
+    [ "$(readlink "$p" 2>/dev/null)" = "$TAISO_DIR/bin/taiso" ] && rm -f "$p"
+  done
+  # PATH-строка codex-шима из rc-файлов (хирургически)
+  /usr/bin/python3 "$TAISO_DIR/bin/taiso.py" disable-codex >/dev/null 2>&1 || true
   launchctl bootout "gui/$(id -u)/cy.radio-taiso.menubar" 2>/dev/null || \
     launchctl unload "$HOME/Library/LaunchAgents/cy.radio-taiso.menubar.plist" 2>/dev/null || true
   pkill -f "TaisoWindow --menubar" 2>/dev/null || true
@@ -69,11 +75,11 @@ fi
 if [ -t 0 ]; then
   read -r -p "Удалить данные и статистику ($TAISO_DIR)? [y/N] " ANS
   case "${ANS:-N}" in
-    [yY]*) rm -rf "$TAISO_DIR"; echo "Каталог удалён." ;;
-    *) rm -rf "$TAISO_DIR/bin"; echo "Код удалён, база и статистика оставлены в $TAISO_DIR." ;;
+    [yY]*) rm -rf "${TAISO_DIR:?}"; echo "Каталог удалён." ;;
+    *) rm -rf "${TAISO_DIR:?}/bin"; echo "Код удалён, база и статистика оставлены в $TAISO_DIR." ;;
   esac
 else
-  rm -rf "$TAISO_DIR/bin"
+  rm -rf "${TAISO_DIR:?}/bin"
   echo "Код удалён, база оставлена (неинтерактивный режим)."
 fi
 

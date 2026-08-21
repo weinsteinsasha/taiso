@@ -5,12 +5,22 @@
 # Mid-session блокировки нет — у Codex CLI нет hooks-API уровня Claude Code.
 TAISO_DIR="${TAISO_DIR:-$HOME/.radio-taiso}"
 TAISO="$TAISO_DIR/bin/taiso"
-SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+# защита от рекурсии (symlink/двойной PATH): второй вход — сразу к настоящему codex
+if [ -n "${TAISO_SHIM_ACTIVE:-}" ]; then
+  REAL=""
+  while IFS= read -r cand; do
+    [ "$cand" -ef "$0" ] && continue
+    REAL="$cand"; break
+  done < <(which -a codex 2>/dev/null)
+  [ -n "$REAL" ] && exec "$REAL" "$@"
+  exit 127
+fi
+export TAISO_SHIM_ACTIVE=1
 
-# найти настоящий codex (первый в PATH, который не мы)
+# найти настоящий codex (первый в PATH, который не мы — сравнение по inode)
 REAL=""
 while IFS= read -r cand; do
-  [ "$(cd "$(dirname "$cand")" && pwd)/$(basename "$cand")" = "$SELF" ] && continue
+  [ "$cand" -ef "$0" ] && continue
   REAL="$cand"; break
 done < <(which -a codex 2>/dev/null)
 [ -z "$REAL" ] && { echo "codex не найден в PATH"; exit 127; }

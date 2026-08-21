@@ -232,7 +232,10 @@ class TestHooksE2E(Base):
         ok = self.run_hook("hook-tool", {
             "session_id": "s1", "tool_name": "Bash",
             "tool_input": {"command": "taiso go"}})
-        self.assertEqual(ok.stdout.strip(), "")  # allow = молчание
+        # security-аудит: hook сам открывает окно и всё равно deny —
+        # shell не исполняет подложенный `taiso`
+        self.assertIn("deny", ok.stdout)
+        self.assertIn("radio-taiso", ok.stdout)
 
     def test_fail_open_on_garbage(self):
         for payload in ["not json", "{" * 100]:

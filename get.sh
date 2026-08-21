@@ -11,4 +11,5 @@ trap 'rm -rf "$SRC"' EXIT
 echo "⛩ Скачиваю radio-taiso..."
 git clone --depth 1 --quiet https://github.com/weinsteinsasha/taiso.git "$SRC"
 cd "$SRC"
-exec ./install.sh
+./install.sh
+exit $?

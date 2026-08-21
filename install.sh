@@ -39,6 +39,9 @@ chmod 755 "$TAISO_DIR/bin/taiso"
 SYMLINK_DONE=""
 for SYMLINK_DIR in /opt/homebrew/bin /usr/local/bin; do
   if [ -d "$SYMLINK_DIR" ] && [ -w "$SYMLINK_DIR" ]; then
+    if [ -e "$SYMLINK_DIR/taiso" ] && [ "$(readlink "$SYMLINK_DIR/taiso" 2>/dev/null)" != "$TAISO_DIR/bin/taiso" ]; then
+      echo "ВНИМАНИЕ: $SYMLINK_DIR/taiso уже существует и не наш — не трогаю"; continue
+    fi
     ln -sf "$TAISO_DIR/bin/taiso" "$SYMLINK_DIR/taiso"
     echo "CLI: $SYMLINK_DIR/taiso"
     SYMLINK_DONE=1
@@ -61,14 +64,16 @@ chmod 600 "$TAISO_DIR/config.json" 2>/dev/null || true
 VIDEO="$TAISO_DIR/radio-taiso.mp4"
 if [ ! -s "$VIDEO" ]; then
   command -v yt-dlp >/dev/null || brew install yt-dlp
-  URL=$("$PY" -c "import json;print(json.load(open('$TAISO_DIR/config.json'))['video_url'])")
+  URL=$("$PY" -c 'import json,sys;print(json.load(open(sys.argv[1]))["video_url"])' "$TAISO_DIR/config.json")
   echo "Скачиваю видео Radio Taiso..."
   # 1080p с merge через ffmpeg (если есть), иначе лучший прогрессивный mp4
   if command -v ffmpeg >/dev/null; then
-    yt-dlp -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
-      --merge-output-format mp4 -o "$VIDEO" "$URL" || true
+    yt-dlp --ignore-config --no-config-locations \
+      -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
+      --merge-output-format mp4 -o "$VIDEO" -- "$URL" || true
   else
-    yt-dlp -f "best[ext=mp4][height<=1080]/best[ext=mp4]/best" -o "$VIDEO" "$URL" || true
+    yt-dlp --ignore-config --no-config-locations \
+      -f "best[ext=mp4][height<=1080]/best[ext=mp4]/best" -o "$VIDEO" -- "$URL" || true
   fi
   if [ -s "$VIDEO" ]; then
     SIZE=$(stat -f%z "$VIDEO")
@@ -98,13 +103,19 @@ fi
 [ -s "$VIDEO" ] && echo "Видео: ок" || echo "Видео: нет (таймер-режим; положи mp4 в $VIDEO и пропиши video_path)"
 
 # --- 7. Merge hooks + statusline в settings.json
-BACKUP="$SETTINGS.bak-$(date +%Y%m%d-%H%M%S)"
-[ -f "$SETTINGS" ] && cp "$SETTINGS" "$BACKUP" && echo "Бэкап: $BACKUP"
+mkdir -p "$TAISO_DIR/backups" && chmod 700 "$TAISO_DIR/backups"
+BACKUP="$TAISO_DIR/backups/settings.json.bak-$(date +%Y%m%d-%H%M%S)"
+if [ -f "$SETTINGS" ]; then
+  cp "$SETTINGS" "$BACKUP" || { echo "Не удалось сделать бэкап settings.json — стоп"; exit 1; }
+  chmod 600 "$BACKUP"; echo "Бэкап: $BACKUP"
+  ls -t "$TAISO_DIR/backups"/settings.json.bak-* 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null || true
+fi
 
+set +e
 TAISO_DIR="$TAISO_DIR" SETTINGS="$SETTINGS" "$PY" <<'PYEOF'
-import json, os, sys, copy
+import json, os, sys, copy, shlex, shutil
 
-settings_path = os.environ["SETTINGS"]
+settings_path = os.path.realpath(os.environ["SETTINGS"])  # symlink в dotfiles не ломаем
 taiso_dir = os.environ["TAISO_DIR"]
 py = "/usr/bin/python3"
 script = os.path.join(taiso_dir, "bin", "taiso.py")
@@ -142,8 +153,8 @@ def install(event, cmd):
                     else {"hooks": [entry]})
     hooks[event] = [m for m in matchers if m.get("hooks")]
 
-install("UserPromptSubmit", f"{py} {script} hook-prompt")
-install("PreToolUse", f"{py} {script} hook-tool")
+install("UserPromptSubmit", f"{py} {shlex.quote(script)} hook-prompt")
+install("PreToolUse", f"{py} {shlex.quote(script)} hook-tool")
 
 if "statusLine" not in settings:  # чужую statusline не трогаем
     settings["statusLine"] = {
@@ -159,10 +170,15 @@ tmp = settings_path + ".tmp"
 with open(tmp, "w") as f:
     json.dump(settings, f, ensure_ascii=False, indent=2)
 json.load(open(tmp))  # финальная валидация
+if os.path.exists(settings_path):
+    shutil.copymode(settings_path, tmp)  # не ослаблять права (0600 остаётся 0600)
+else:
+    os.chmod(tmp, 0o600)
 os.replace(tmp, settings_path)
 print("settings.json: hooks + statusline установлены")
 PYEOF
 RC=$?
+set -e
 if [ $RC -ne 0 ]; then
   [ -f "$BACKUP" ] && cp "$BACKUP" "$SETTINGS" && echo "Откат из бэкапа выполнен."
   exit $RC

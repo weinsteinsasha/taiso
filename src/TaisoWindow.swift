@@ -37,8 +37,7 @@ func acquireLock() -> Bool {
        kill(pid, 0) == 0 {
         return false // живой процесс окна уже есть
     }
-    try? String(ProcessInfo.processInfo.processIdentifier)
-        .write(toFile: lockPath, atomically: true, encoding: .utf8)
+    writePrivate(String(ProcessInfo.processInfo.processIdentifier), to: lockPath)
     return true
 }
 
@@ -53,6 +52,18 @@ func cfgLang() -> String {
 }
 
 func L(_ en: String, _ ru: String) -> String { cfgLang() == "ru" ? ru : en }
+
+func cfgBool(_ key: String, _ def: Bool) -> Bool {
+    guard let data = fm.contents(atPath: taisoDir + "/config.json"),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return def }
+    return (json[key] as? Bool) ?? def
+}
+
+func writePrivate(_ text: String, to path: String) {
+    fm.createFile(atPath: path, contents: text.data(using: .utf8),
+                  attributes: [.posixPermissions: 0o600])
+}
 
 func countAllApps() -> Bool {
     guard let data = fm.contents(atPath: taisoDir + "/config.json"),
@@ -69,7 +80,9 @@ func videoURL() -> URL? {
     else { return nil }
     let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
     let root = URL(fileURLWithPath: taisoDir).resolvingSymlinksInPath().path
-    guard resolved.hasPrefix(root + "/"), fm.fileExists(atPath: resolved)
+    guard resolved.hasPrefix(root + "/"), fm.fileExists(atPath: resolved),
+          ["mp4", "mov", "m4v"].contains(URL(fileURLWithPath: resolved).pathExtension.lowercased()),
+          (try? fm.attributesOfItem(atPath: resolved))?[.type] as? FileAttributeType == .typeRegular
     else { return nil }
     return URL(fileURLWithPath: resolved)
 }
@@ -192,7 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             format: L("%d:%02d left", "Осталось %d:%02d"), left / 60, left % 60)
 
         // позиция каждые 5 сек — resume после прерывания
-        if let t = player?.currentTime().seconds, t - lastSavedPos >= 5 {
+        if let t = player?.currentTime().seconds, t.isFinite, t - lastSavedPos >= 5 {
             lastSavedPos = t
             _ = runTaiso(["video-pos", "--set", String(format: "%.1f", t)])
         }
@@ -367,11 +380,12 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
     @objc func giveFeedback() { showFeedbackDialog(auto: false) }
 
     func maybeAutoFeedback() {
+        guard cfgBool("feedback_prompt", true) else { return }
         let hour = Calendar.current.component(.hour, from: Date())
         guard hour >= 20 else { return }
-        let marker = taisoDir + "/.feedback-" + todayString()
+        let marker = taisoDir + "/feedback-" + todayString() + ".prompted"
         guard !fm.fileExists(atPath: marker) else { return }
-        try? "x".write(toFile: marker, atomically: true, encoding: .utf8)
+        writePrivate("x", to: marker)
         showFeedbackDialog(auto: true)
     }
 
@@ -409,8 +423,7 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
         let stats = runTaiso(["stats"])
         let body = "\(text)\n\n---\n\(stats)\nv: phase2 · \(todayString())"
         // локальная копия — в почтовом черновике можно и передумать
-        try? body.write(toFile: taisoDir + "/feedback-\(todayString()).txt",
-                        atomically: true, encoding: .utf8)
+        writePrivate(body, to: taisoDir + "/feedback-\(todayString()).txt")
         var comp = URLComponents(string: "mailto:weinsteinsasha@gmail.com")!
         comp.queryItems = [
             URLQueryItem(name: "subject", value: "radio-taiso feedback"),
