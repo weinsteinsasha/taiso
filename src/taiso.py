@@ -610,6 +610,11 @@ def main():
         with open(config_path(), "w") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
         print("%s = %s" % (key, num))
+    elif cmd == "video":
+        # докачать видео позже (обновляет yt-dlp, YouTube отдаёт 403 старым версиям)
+        script = os.path.join(taiso_dir(), "bin", "fetch-video.sh")
+        rc = subprocess.call(["/bin/bash", script]) if os.path.exists(script) else 1
+        sys.exit(rc)
     elif cmd == "doctor":
         # диагностика для удалённой поддержки: одна команда, весь вывод — в чат
         import shutil as _sh

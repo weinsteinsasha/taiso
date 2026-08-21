@@ -60,47 +60,14 @@ chmod 755 "$TAISO_DIR/bin/TaisoWindow"
 TAISO_DIR="$TAISO_DIR" "$PY" "$TAISO_DIR/bin/taiso.py" init
 chmod 600 "$TAISO_DIR/config.json" 2>/dev/null || true
 
-# --- 6. Видео (единственный сетевой акт; yt-dlp без --exec, фиксированный -o)
+# --- 6. Видео (единственный сетевой акт) — вынесено в fetch-video.sh, повтор: `taiso video`
+cp "$REPO_DIR/src/fetch-video.sh" "$TAISO_DIR/bin/fetch-video.sh" && chmod 755 "$TAISO_DIR/bin/fetch-video.sh"
 VIDEO="$TAISO_DIR/radio-taiso.mp4"
 if [ ! -s "$VIDEO" ]; then
-  command -v yt-dlp >/dev/null || brew install yt-dlp
-  URL=$("$PY" -c 'import json,sys;print(json.load(open(sys.argv[1]))["video_url"])' "$TAISO_DIR/config.json")
-  echo "Скачиваю видео Radio Taiso..."
-  # 1080p с merge через ffmpeg (если есть), иначе лучший прогрессивный mp4
-  if command -v ffmpeg >/dev/null; then
-    yt-dlp --ignore-config --no-config-locations \
-      -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
-      --merge-output-format mp4 -o "$VIDEO" -- "$URL" || true
-  else
-    yt-dlp --ignore-config --no-config-locations \
-      -f "best[ext=mp4][height<=1080]/best[ext=mp4]/best" -o "$VIDEO" -- "$URL" || true
-  fi
-  if [ -s "$VIDEO" ]; then
-    SIZE=$(stat -f%z "$VIDEO")
-    if [ "$SIZE" -lt 1000000 ] || [ "$SIZE" -gt 500000000 ]; then
-      echo "Видео подозрительного размера ($SIZE байт) — удаляю, таймер-режим"; rm -f "$VIDEO"
-    elif command -v ffprobe >/dev/null; then
-      DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$VIDEO" 2>/dev/null | cut -d. -f1 || echo 0)
-      [ "${DUR:-0}" -ge 60 ] && [ "${DUR:-0}" -le 900 ] || { echo "Длительность вне вилки ($DUR с) — удаляю"; rm -f "$VIDEO"; }
-    fi
-  fi
-  if [ -s "$VIDEO" ]; then
-    chmod 600 "$VIDEO"
-    # зачёт = фактическая длина ролика (иначе окно обрубает музыку на пороге зачёта)
-    VDUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$VIDEO" 2>/dev/null | cut -d. -f1 || echo "")
-    "$PY" - "$TAISO_DIR" "$VIDEO" "${VDUR:-0}" <<'PYEOF'
-import json, sys
-d, v, dur = sys.argv[1], sys.argv[2], int(sys.argv[3] or 0)
-p = d + "/config.json"
-cfg = json.load(open(p))
-cfg["video_path"] = v
-if 30 <= dur <= 3600:
-    cfg["exercise_seconds"] = dur
-json.dump(cfg, open(p, "w"), ensure_ascii=False, indent=2)
-PYEOF
-  fi
+  TAISO_DIR="$TAISO_DIR" bash "$TAISO_DIR/bin/fetch-video.sh" || true
+else
+  echo "Видео: ок (уже есть)"
 fi
-[ -s "$VIDEO" ] && echo "Видео: ок" || echo "Видео: нет (таймер-режим; положи mp4 в $VIDEO и пропиши video_path)"
 
 # --- 7. Merge hooks + statusline в settings.json
 mkdir -p "$TAISO_DIR/backups" && chmod 700 "$TAISO_DIR/backups"
