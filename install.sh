@@ -191,9 +191,20 @@ if [ -z "${TAISO_NO_MENUBAR:-}" ] && [ "$TAISO_DIR" = "$HOME/.radio-taiso" ]; th
   <key>RunAtLoad</key><true/>
 </dict></plist>
 EOF
-  launchctl unload "$LA_PLIST" 2>/dev/null || true
-  launchctl load "$LA_PLIST" 2>/dev/null && echo "Menubar: запущен (автостарт при логине)" \
-    || echo "Menubar: LaunchAgent записан, запусти вручную: $TAISO_DIR/bin/TaisoWindow --menubar &"
+  pkill -f "TaisoWindow --menubar" 2>/dev/null || true
+  launchctl bootout "gui/$(id -u)/cy.radio-taiso.menubar" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$LA_PLIST" 2>/dev/null || launchctl load "$LA_PLIST" 2>/dev/null || true
+  sleep 2
+  if ! pgrep -f "TaisoWindow --menubar" >/dev/null; then
+    # launchd не поднял — стартуем напрямую, автозапуск при логине всё равно прописан
+    (nohup "$TAISO_DIR/bin/TaisoWindow" --menubar >/dev/null 2>&1 &)
+    sleep 2
+  fi
+  if pgrep -f "TaisoWindow --menubar" >/dev/null; then
+    echo "Menubar: запущен ⛩ (ищи у часов; на MacBook с чёлкой иконки могут прятаться — сверни лишние)"
+  else
+    echo "ВНИМАНИЕ: menubar не стартовал. Диагностика: taiso doctor"
+  fi
 fi
 
 # --- 8. Smoke-тест: фиктивный hook-вызов

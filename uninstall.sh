@@ -56,10 +56,14 @@ print("settings.json: записи radio-taiso удалены, чужие hooks 
 PYEOF
 fi
 
-# --- 3. PATH и LaunchAgent
-rm -f /usr/local/bin/taiso 2>/dev/null || true
-launchctl unload "$HOME/Library/LaunchAgents/cy.radio-taiso.menubar.plist" 2>/dev/null || true
-rm -f "$HOME/Library/LaunchAgents/cy.radio-taiso.menubar.plist" 2>/dev/null || true
+# --- 3. PATH и LaunchAgent — ТОЛЬКО для боевого каталога (тесты с TAISO_DIR не трогают реальный агент)
+if [ "$TAISO_DIR" = "$HOME/.radio-taiso" ]; then
+  rm -f /usr/local/bin/taiso /opt/homebrew/bin/taiso 2>/dev/null || true
+  launchctl bootout "gui/$(id -u)/cy.radio-taiso.menubar" 2>/dev/null || \
+    launchctl unload "$HOME/Library/LaunchAgents/cy.radio-taiso.menubar.plist" 2>/dev/null || true
+  pkill -f "TaisoWindow --menubar" 2>/dev/null || true
+  rm -f "$HOME/Library/LaunchAgents/cy.radio-taiso.menubar.plist" 2>/dev/null || true
+fi
 
 # --- 4. Каталог: статистику по умолчанию оставляем
 if [ -t 0 ]; then
