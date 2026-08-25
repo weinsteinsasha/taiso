@@ -46,7 +46,7 @@ p = d + "/config.json"
 cfg = json.load(open(p))
 cfg["video_path"] = v
 if 60 <= dur <= 900:
-    cfg["exercise_seconds"] = max(60, dur - 30)  # минус аутро: в конце Аки прощается, а не упражняется
+    cfg["exercise_seconds"] = dur  # полный ролик: финал — дыхательное упражнение (13-е движение канона), не титры
 json.dump(cfg, open(p, "w"), ensure_ascii=False, indent=2)
 PYEOF
   echo "Видео: ок"
