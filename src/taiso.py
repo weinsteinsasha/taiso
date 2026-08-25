@@ -235,12 +235,12 @@ def balance_line(cfg, balance, allowed):
     mins = balance // 60
     if lang(cfg) == "ru":
         if not allowed:
-            return "⛩ БЛОК — скажи «давай зарядку»"
+            return "⛩ БЛОК — скажи «Начать зарядку»"
         if balance < 0:
             return "⛩ −%d мин ДОЛГ" % (abs(balance) // 60)
         return "⛩ %d мин" % mins
     if not allowed:
-        return "⛩ BLOCKED — say “start exercise”"
+        return "⛩ BLOCKED — say “Start exercise”"
     if balance < 0:
         return "⛩ −%d min DEBT" % (abs(balance) // 60)
     return "⛩ %d min" % mins

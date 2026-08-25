@@ -187,6 +187,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func abortAndQuit() {
         guard !finished else { return }
+        // досмотрел почти до конца — Esc засчитывает, а не сбрасывает
+        if required - accrued <= 15 {
+            finish()
+            return
+        }
         finished = true
         timer?.invalidate()
         let pos = player?.currentTime().seconds ?? 0
@@ -478,7 +483,7 @@ extension MenubarDelegate: NSMenuDelegate {
             menu.addItem(it)
         }
         menu.addItem(.separator())
-        let go = NSMenuItem(title: L("Exercise now", "Зарядка сейчас"),
+        let go = NSMenuItem(title: L("Start exercise", "Начать зарядку"),
                             action: #selector(startExercise), keyEquivalent: "g")
         go.target = self
         menu.addItem(go)
