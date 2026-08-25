@@ -164,12 +164,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             content.addSubview(btn)
         }
 
+        let escHint = label(L("Esc — leave without credit", "Esc — выйти без зачёта"),
+                            size: 14, color: NSColor.white.withAlphaComponent(0.6))
+        escHint.frame = NSRect(x: 0, y: 6, width: content.bounds.width, height: 20)
+        escHint.autoresizingMask = [.width]
+        content.addSubview(escHint)
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] ev in
+            if ev.keyCode == 53 { // Esc: прерывание честно логируется, позиция сохраняется
+                self?.abortAndQuit()
+                return nil
+            }
+            return ev
+        }
+
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) {
             [weak self] _ in self?.tick()
         }
+    }
+
+    func abortAndQuit() {
+        guard !finished else { return }
+        finished = true
+        timer?.invalidate()
+        let pos = player?.currentTime().seconds ?? 0
+        _ = runTaiso(["exercise-abort", "--position",
+                      String(format: "%.1f", pos.isFinite ? pos : 0)])
+        accrued = required
+        releaseLock()
+        NSApp.terminate(nil)
     }
 
     func label(_ text: String, size: CGFloat, color: NSColor) -> NSTextField {

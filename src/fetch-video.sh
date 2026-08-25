@@ -12,8 +12,8 @@ command -v yt-dlp >/dev/null || brew install yt-dlp >/dev/null 2>&1
 yt-dlp -U >/dev/null 2>&1 || brew upgrade yt-dlp >/dev/null 2>&1 || "$PY" -m pip install -q -U yt-dlp >/dev/null 2>&1 || true
 
 echo "Скачиваю видео Radio Taiso..."
-rm -f "$VIDEO".part 2>/dev/null
-COMMON=(--ignore-config --no-config-locations --no-update -o "$VIDEO")
+rm -f "$VIDEO" "$VIDEO".part 2>/dev/null  # всегда с нуля: докачка после 403 клеит битый файл
+COMMON=(--ignore-config --no-config-locations --no-update --no-continue -o "$VIDEO")
 if command -v ffmpeg >/dev/null; then
   yt-dlp "${COMMON[@]}" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
     --merge-output-format mp4 -- "$URL" \
@@ -31,6 +31,10 @@ if [ -s "$VIDEO" ]; then
     DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$VIDEO" 2>/dev/null | cut -d. -f1 || echo 0)
     [ "${DUR:-0}" -ge 60 ] && [ "${DUR:-0}" -le 900 ] || { echo "Длительность вне вилки ($DUR с) — удаляю"; rm -f "$VIDEO"; }
   fi
+  # видео обязано реально декодироваться (битые склейки: звук есть, картинки нет)
+  if [ -s "$VIDEO" ] && command -v ffmpeg >/dev/null; then
+    ffmpeg -v error -xerror -ss 0 -t 5 -i "$VIDEO" -map 0:v:0 -f null - 2>/dev/null       || { echo "Видео не декодируется (битый файл) — удаляю"; rm -f "$VIDEO"; }
+  fi
 fi
 if [ -s "$VIDEO" ]; then
   chmod 600 "$VIDEO"
@@ -41,7 +45,7 @@ d, v, dur = sys.argv[1], sys.argv[2], int(sys.argv[3] or 0)
 p = d + "/config.json"
 cfg = json.load(open(p))
 cfg["video_path"] = v
-if 30 <= dur <= 3600:
+if 60 <= dur <= 900:
     cfg["exercise_seconds"] = dur
 json.dump(cfg, open(p, "w"), ensure_ascii=False, indent=2)
 PYEOF

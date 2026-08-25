@@ -223,7 +223,8 @@ def compute_allowed(con, cfg, balance):
 
 def required_exercise_seconds(cfg, balance):
     debt_min = max(0, -balance) / 60.0
-    return int(cfg["exercise_seconds"] + cfg["debt_penalty_seconds_per_minute"] * debt_min)
+    req = int(cfg["exercise_seconds"] + cfg["debt_penalty_seconds_per_minute"] * debt_min)
+    return min(req, 900)  # потолок 15 мин: битые метаданные видео не превращаются в пытку
 
 
 def lang(cfg):
