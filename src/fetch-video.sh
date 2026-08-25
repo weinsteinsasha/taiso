@@ -15,11 +15,11 @@ echo "Скачиваю видео Radio Taiso..."
 rm -f "$VIDEO" "$VIDEO".part 2>/dev/null  # всегда с нуля: докачка после 403 клеит битый файл
 COMMON=(--ignore-config --no-config-locations --no-update --no-continue -o "$VIDEO")
 if command -v ffmpeg >/dev/null; then
-  yt-dlp "${COMMON[@]}" -f "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
+  yt-dlp "${COMMON[@]}" -f "bestvideo[vcodec^=avc1][height<=1080]+bestaudio[ext=m4a]/best[vcodec^=avc1][ext=mp4]/best[ext=mp4]" \
     --merge-output-format mp4 -- "$URL" \
   || yt-dlp "${COMMON[@]}" -f "best[ext=mp4]/best" --extractor-args "youtube:player_client=ios" -- "$URL" || true
 else
-  yt-dlp "${COMMON[@]}" -f "best[ext=mp4][height<=1080]/best[ext=mp4]/best" -- "$URL" \
+  yt-dlp "${COMMON[@]}" -f "best[vcodec^=avc1][ext=mp4][height<=1080]/best[ext=mp4]" -- "$URL" \
   || yt-dlp "${COMMON[@]}" -f "best[ext=mp4]/best" --extractor-args "youtube:player_client=ios" -- "$URL" || true
 fi
 
