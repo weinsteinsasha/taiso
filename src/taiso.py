@@ -811,7 +811,12 @@ def main():
         con = connect()
         balance = con.execute(
             "SELECT balance_seconds FROM state WHERE id = 1").fetchone()[0]
-        print("yes" if balance <= 0 and not postponed_since_exercise(con) else "no")
+        if balance > 0:
+            print("no-need")
+        elif postponed_since_exercise(con):
+            print("used")
+        else:
+            print("yes")
         con.close()
     elif cmd == "config-set-lang":
         value = args[1]

@@ -519,7 +519,8 @@ extension MenubarDelegate: NSMenuDelegate {
         let pauseItem = NSMenuItem(title: L("Pause (meeting)", "Пауза (встреча)"),
                                    action: nil, keyEquivalent: "")
         let pauseSub = NSMenu()
-        for (mins, title) in [(30, "30 min"), (60, "1 h"), (120, "2 h")] {
+        for (mins, title) in [(30, L("30 min", "30 мин")), (60, L("1 hour", "1 час")),
+                              (120, L("2 hours", "2 часа"))] {
             let it = NSMenuItem(title: title, action: #selector(pauseFor(_:)),
                                 keyEquivalent: "")
             it.target = self
@@ -532,12 +533,22 @@ extension MenubarDelegate: NSMenuDelegate {
         pauseSub.addItem(res)
         pauseItem.submenu = pauseSub
         menu.addItem(pauseItem)
-        if runTaiso(["postpone-available"]) == "yes" {
-            let borrow = NSMenuItem(
-                title: L("Borrow +20 min (exercise later, ×1.5)",
-                         "Взять в долг +20 мин (зарядка позже, ×1.5)"),
-                action: #selector(borrowNow), keyEquivalent: "")
+        let avail = runTaiso(["postpone-available"])
+        let borrowTitle = L("Borrow +20 min (exercise later, ×1.5)",
+                            "Взять в долг +20 мин (зарядка позже, ×1.5)")
+        if avail == "yes" {
+            let borrow = NSMenuItem(title: borrowTitle,
+                                    action: #selector(borrowNow), keyEquivalent: "")
             borrow.target = self
+            menu.addItem(borrow)
+        } else {
+            // всегда виден, но серый — иначе кнопку «не находят» (фидбек 27.08)
+            let why = avail == "used"
+                ? L("already used this period", "уже использован в этом периоде")
+                : L("available when balance hits 0", "доступен, когда баланс на нуле")
+            let borrow = NSMenuItem(title: borrowTitle + " — " + why,
+                                    action: nil, keyEquivalent: "")
+            borrow.isEnabled = false
             menu.addItem(borrow)
         }
         let langItem = NSMenuItem(title: "Language / Язык", action: nil, keyEquivalent: "")
