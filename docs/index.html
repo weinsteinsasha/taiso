@@ -386,7 +386,8 @@
       <span><span class="ru">До −20 минут: звонок или поток никто не рубит. Долг просто удорожает
       следующую зарядку в полтора раза.</span>
       <span class="en">Up to −20 minutes: no one cuts off your call or flow. Debt just makes the next
-      exercise 1.5× longer.</span></span></div></div>
+      exercise 1.5× longer.</span> <span class="ru">А на встречу — честная пауза: <code style="font-family:var(--mono);font-size:13px">taiso pause 60</code> замораживает и блок, и счётчик.</span>
+      <span class="en">And for meetings — an honest pause: <code style="font-family:var(--mono);font-size:13px">taiso pause 60</code> freezes both the gate and the clock.</span></span></div></div>
     <div class="step"><div><b><span class="ru">Долг исчерпан — Клод мягко останавливается</span><span class="en">Debt spent — Claude gently stops</span></b>
       <span><span class="ru">И сам, своими словами, предлагает встать. Экран, браузер, звонки работают.
       Отдыхает только агент.</span>
@@ -440,6 +441,21 @@
      <span class="en">Honestly: the product is days old — this is first-user data, not a clinical study.
      That's exactly why the app asks "how was your day?" every evening: we're collecting real
      before/after, and in a month this table will hold numbers, not promises.</span></p>
+</section>
+
+<section>
+  <h2><span class="jp">解</span><span class="ru">Удалить так же просто</span><span class="en">Removing is just as easy</span></h2>
+  <div class="install">
+    <div class="install-label"><span class="ru">Одна команда — всё вернётся как было</span><span class="en">One command — everything goes back</span></div>
+    <div class="cmd">
+      <code id="cmdun">~/.radio-taiso/bin/uninstall.sh</code>
+      <button onclick="copyCmd(this,'cmdun')"><span class="ru">Скопировать</span><span class="en">Copy</span></button>
+    </div>
+  </div>
+  <p class="req"><span class="ru">Уберёт только свои записи из настроек Claude Code (чужие hooks не тронет),
+     снимет menubar и спросит, оставить ли статистику. Без следов и обид.</span>
+     <span class="en">Removes only its own entries from Claude Code settings (other hooks untouched),
+     stops the menubar and asks whether to keep your stats. No traces, no hard feelings.</span></p>
 </section>
 
 <section>

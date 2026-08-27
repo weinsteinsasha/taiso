@@ -332,6 +332,21 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
         _ = runTaiso(["go"])
     }
 
+    @objc func pauseFor(_ sender: NSMenuItem) {
+        _ = runTaiso(["pause", String(sender.tag)])
+        refresh()
+    }
+
+    @objc func resumeNow() {
+        _ = runTaiso(["resume"])
+        refresh()
+    }
+
+    @objc func borrowNow() {
+        _ = runTaiso(["postpone"])
+        refresh()
+    }
+
     @objc func setLangItem(_ sender: NSMenuItem) {
         if let code = sender.representedObject as? String {
             _ = runTaiso(["config-set-lang", code])
@@ -501,6 +516,30 @@ extension MenubarDelegate: NSMenuDelegate {
         }
         intervals.submenu = sub
         menu.addItem(intervals)
+        let pauseItem = NSMenuItem(title: L("Pause (meeting)", "Пауза (встреча)"),
+                                   action: nil, keyEquivalent: "")
+        let pauseSub = NSMenu()
+        for (mins, title) in [(30, "30 min"), (60, "1 h"), (120, "2 h")] {
+            let it = NSMenuItem(title: title, action: #selector(pauseFor(_:)),
+                                keyEquivalent: "")
+            it.target = self
+            it.tag = mins
+            pauseSub.addItem(it)
+        }
+        let res = NSMenuItem(title: L("Resume", "Возобновить"),
+                             action: #selector(resumeNow), keyEquivalent: "")
+        res.target = self
+        pauseSub.addItem(res)
+        pauseItem.submenu = pauseSub
+        menu.addItem(pauseItem)
+        if runTaiso(["postpone-available"]) == "yes" {
+            let borrow = NSMenuItem(
+                title: L("Borrow +20 min (exercise later, ×1.5)",
+                         "Взять в долг +20 мин (зарядка позже, ×1.5)"),
+                action: #selector(borrowNow), keyEquivalent: "")
+            borrow.target = self
+            menu.addItem(borrow)
+        }
         let langItem = NSMenuItem(title: "Language / Язык", action: nil, keyEquivalent: "")
         let langSub = NSMenu()
         let curLang = cfgLang()

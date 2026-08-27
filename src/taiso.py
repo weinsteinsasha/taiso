@@ -113,6 +113,11 @@ def ensure_schema(con, fresh):
     have = {r[0] for r in con.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
     if "state" in have and "events" in have and "sessions" in have and "profile" in have:
+        try:
+            con.execute("ALTER TABLE state ADD COLUMN pause_until_utc INTEGER NOT NULL DEFAULT 0")
+            con.commit()
+        except sqlite3.OperationalError:
+            pass  # колонка уже есть
         return
     recreated = bool(have) and "state" not in have  # что-то было, но схема битая
     con.executescript("""
@@ -121,7 +126,8 @@ def ensure_schema(con, fresh):
             balance_seconds INTEGER NOT NULL,
             last_activity_utc INTEGER NOT NULL,
             day_credit_date TEXT NOT NULL,
-            video_position_sec REAL NOT NULL DEFAULT 0
+            video_position_sec REAL NOT NULL DEFAULT 0,
+            pause_until_utc INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS sessions (
             session_id TEXT PRIMARY KEY,
@@ -176,8 +182,17 @@ def process_turn(con, cfg, session_id, now=None):
         " WHERE id = 1 AND day_credit_date != ?", (free, today, today))
     got_credit = cur.rowcount > 0
     row = con.execute(
-        "SELECT balance_seconds, last_activity_utc FROM state WHERE id = 1").fetchone()
-    last = row[1]
+        "SELECT balance_seconds, last_activity_utc, pause_until_utc"
+        " FROM state WHERE id = 1").fetchone()
+    last, pause_until = row[1], row[2]
+    if now < pause_until:  # режим встречи: заморозка счёта и блока
+        con.execute("UPDATE state SET last_activity_utc = ? WHERE id = 1", (now,))
+        con.execute(
+            "INSERT INTO sessions (session_id, turn_allowed, updated_utc) VALUES (?, 1, ?)"
+            " ON CONFLICT(session_id) DO UPDATE SET turn_allowed = 1, updated_utc = ?",
+            (session_id, now, now))
+        con.commit()
+        return row[0], 1
     gap = now - last
     charged = gap if 0 < gap < idle_gap else 0
     con.execute(
@@ -286,7 +301,8 @@ def hook_prompt():
                       "привязкой к текущей работе предложить размяться прямо сейчас. "
                       "Единственная разрешённая команда: Bash `{} go` — предложи запустить "
                       "зарядку ею. Не выполняй другую работу и не обещай её выполнить до зарядки. "
-                      "Закончи ЭТОТ ответ строкой: {}".format(
+                      "Если у оператора звонок/встреча — скажи ему про `taiso pause 60` "
+                      "(пауза, раз в звонок). Закончи ЭТОТ ответ строкой: {}".format(
                           abs(balance) // 60, req // 60, req % 60, unlock_cli(), line)
                       + hint_ru)
             else:
@@ -296,7 +312,8 @@ def hook_prompt():
                       "tied to the current work, invite them to move right now. The only "
                       "allowed command is Bash `{} go` — offer to start the exercise with it. "
                       "Do not perform or promise other work before the exercise. "
-                      "End THIS reply with: {}".format(
+                      "If the operator is on a call/meeting — mention `taiso pause 60` "
+                      "(meeting pause). End THIS reply with: {}".format(
                           abs(balance) // 60, req // 60, req % 60, unlock_cli(), line)
                       + hint_en)
         con.close()
@@ -343,7 +360,10 @@ def is_unlock_command(raw_cmd):
         argv = shlex.split(raw_cmd)
     except ValueError:
         return False
-    if len(argv) != 2 or argv[1] not in ("go", "status"):
+    ok2 = len(argv) == 2 and argv[1] in ("go", "status", "resume")
+    ok3 = (len(argv) == 3 and argv[1] == "pause" and argv[2].isdigit()
+           and 1 <= int(argv[2]) <= 180)
+    if not (ok2 or ok3):
         return False
     prog = argv[0]
     return os.path.basename(prog) == "taiso" and (
@@ -355,8 +375,12 @@ def charge_activity(con, cfg, now=None):
     now = int(now or time.time())
     idle_gap = int(cfg["idle_gap_minutes"] * 60)
     con.execute("BEGIN IMMEDIATE")
-    last = con.execute(
-        "SELECT last_activity_utc FROM state WHERE id = 1").fetchone()[0]
+    last, pause_until = con.execute(
+        "SELECT last_activity_utc, pause_until_utc FROM state WHERE id = 1").fetchone()
+    if now < pause_until:
+        con.execute("UPDATE state SET last_activity_utc = ? WHERE id = 1", (now,))
+        con.commit()
+        return
     gap = now - last
     charged = gap if 0 < gap < idle_gap else 0
     con.execute(
@@ -383,7 +407,26 @@ def hook_tool():
             cmd = (inp.get("tool_input") or {}).get("command", "")
             if is_unlock_command(cmd):
                 # НЕ пропускаем в shell (там может быть подложенный `taiso`):
-                # окно открываем сами, фиксированным путём, и всё равно deny.
+                # действие выполняем сами, фиксированным путём, и всё равно deny.
+                argv = shlex.split(cmd)
+                if argv[1] == "pause":
+                    mins = int(argv[2])
+                    do_pause(mins)
+                    print(json.dumps({"hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason":
+                            "radio-taiso: пауза на %d мин включена (режим встречи) — "
+                            "работа разблокирована со следующего сообщения оператора." % mins}}))
+                    sys.exit(0)
+                if argv[1] == "resume":
+                    do_pause(0)
+                    print(json.dumps({"hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason":
+                            "radio-taiso: пауза снята — обычный режим со следующего сообщения."}}))
+                    sys.exit(0)
                 opened = spawn_window()
                 msg = ("radio-taiso: окно зарядки открыто — пусть оператор сделает "
                        "Radio Taiso, потом продолжим." if lang(load_config()) == "ru" else
@@ -473,8 +516,9 @@ def video_pos(set_value=None):
 def cmd_status(one_line=False):
     cfg = load_config()
     con = connect()
-    balance, last = con.execute(
-        "SELECT balance_seconds, last_activity_utc FROM state WHERE id = 1").fetchone()
+    balance, last, pause_until = con.execute(
+        "SELECT balance_seconds, last_activity_utc, pause_until_utc"
+        " FROM state WHERE id = 1").fetchone()
     # живой каунтдаун: прогноз с учётом натёкшего с последней активности
     gap = int(time.time()) - last
     if 0 < gap < int(cfg["idle_gap_minutes"] * 60):
@@ -482,6 +526,12 @@ def cmd_status(one_line=False):
     debt_limit = int(cfg["debt_limit_minutes"] * 60)
     allowed = compute_allowed(con, cfg, balance)
     con.close()
+    if time.time() < pause_until:
+        hhmm = datetime.datetime.fromtimestamp(pause_until).strftime("%H:%M")
+        print(("⛩ ⏸ пауза до %s" if lang(cfg) == "ru" else "⛩ ⏸ paused until %s") % hhmm)
+        if not one_line:
+            print("taiso resume — вернуться." if lang(cfg) == "ru" else "taiso resume — back to work mode.")
+        return
     line = balance_line(cfg, balance, allowed)
     if one_line:
         print(line)
@@ -500,6 +550,20 @@ def cmd_status(one_line=False):
     else:
         print("Заблокировано. Разблокировка: taiso go (%d сек зарядки)." % req if ru
               else "Blocked. Unlock: taiso go (%d sec of exercise)." % req)
+
+
+def do_pause(minutes):
+    """Режим встречи: заморозка блока и счёта на N минут (0 = снять)."""
+    con = connect()
+    until = int(time.time()) + minutes * 60 if minutes > 0 else 0
+    con.execute("BEGIN IMMEDIATE")
+    con.execute("UPDATE state SET pause_until_utc = ?, last_activity_utc = ?"
+                " WHERE id = 1", (until, int(time.time())))
+    con.execute("UPDATE sessions SET turn_allowed = 1")
+    con.commit()
+    add_event(con, "pause", {"minutes": minutes})
+    con.close()
+    return until
 
 
 def spawn_window():
@@ -578,6 +642,17 @@ def main():
         cmd_status(one_line="--line" in args)
     elif cmd == "go":
         cmd_go()
+    elif cmd == "pause":
+        mins = int(args[1]) if len(args) > 1 and args[1].isdigit() else 60
+        mins = max(1, min(180, mins))
+        until = do_pause(mins)
+        print(("⏸ Пауза до %s — блок и счётчик заморожены. Снять: taiso resume"
+               if lang(load_config()) == "ru" else
+               "⏸ Paused until %s — blocking and counting frozen. Undo: taiso resume")
+              % datetime.datetime.fromtimestamp(until).strftime("%H:%M"))
+    elif cmd == "resume":
+        do_pause(0)
+        print("▶ Обычный режим." if lang(load_config()) == "ru" else "▶ Back to normal.")
     elif cmd == "stats":
         cmd_stats(report="--report" in args)
     elif cmd == "exercise-required":
