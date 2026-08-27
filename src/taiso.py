@@ -267,11 +267,11 @@ def hook_prompt():
         ru = lang(cfg) == "ru"
         if allowed:
             if ru:
-                print("[radio-taiso] Баланс оператора: %s. "
-                      "Заканчивай каждый свой ответ отдельной строкой: %s" % (line, line))
+                print("[radio-taiso] Баланс оператора: %s. Закончи ЭТОТ ответ отдельной строкой: %s "
+                      "(только когда такая инструкция есть в текущем ходе; без неё строку не добавляй)." % (line, line))
             else:
-                print("[radio-taiso] Operator balance: %s. "
-                      "End every reply with this line on its own: %s" % (line, line))
+                print("[radio-taiso] Operator balance: %s. End THIS reply with this line on its own: %s "
+                      "(only when this instruction appears in the current turn; never add it otherwise)." % (line, line))
         else:
             req = required_exercise_seconds(cfg, balance)
             can_postpone = not postponed_since_exercise(con)
@@ -286,7 +286,7 @@ def hook_prompt():
                       "привязкой к текущей работе предложить размяться прямо сейчас. "
                       "Единственная разрешённая команда: Bash `{} go` — предложи запустить "
                       "зарядку ею. Не выполняй другую работу и не обещай её выполнить до зарядки. "
-                      "Заканчивай ответ строкой: {}".format(
+                      "Закончи ЭТОТ ответ строкой: {}".format(
                           abs(balance) // 60, req // 60, req % 60, unlock_cli(), line)
                       + hint_ru)
             else:
@@ -296,7 +296,7 @@ def hook_prompt():
                       "tied to the current work, invite them to move right now. The only "
                       "allowed command is Bash `{} go` — offer to start the exercise with it. "
                       "Do not perform or promise other work before the exercise. "
-                      "End your reply with: {}".format(
+                      "End THIS reply with: {}".format(
                           abs(balance) // 60, req // 60, req % 60, unlock_cli(), line)
                       + hint_en)
         con.close()
