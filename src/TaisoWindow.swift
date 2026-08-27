@@ -498,7 +498,12 @@ extension MenubarDelegate: NSMenuDelegate {
             menu.addItem(it)
         }
         menu.addItem(.separator())
-        let go = NSMenuItem(title: L("Start exercise", "Начать зарядку"),
+        var goTitle = L("Start exercise", "Начать зарядку")
+        if let req = Double(runTaiso(["exercise-required"])), req > 0 {
+            // длительность плавает: длина ролика + штраф ×1.5 за долг — показываем честно
+            goTitle += String(format: " (%d:%02d)", Int(req) / 60, Int(req) % 60)
+        }
+        let go = NSMenuItem(title: goTitle,
                             action: #selector(startExercise), keyEquivalent: "g")
         go.target = self
         menu.addItem(go)
