@@ -95,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var required = 180.0
     var pausedLabel: NSTextField!
     var progressLabel: NSTextField!
+    var statsLabel: NSTextField?
     var lastSavedPos = 0.0
     var timerOnlyMode = false
     var finished = false
@@ -124,6 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if pos > 1 {
                 p.seek(to: CMTime(seconds: pos, preferredTimescale: 600))
             }
+            p.isMuted = cfgBool("video_muted", false)
             p.play()
             player = p
             NotificationCenter.default.addObserver(
@@ -148,13 +150,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         content.addSubview(pausedLabel)
         progressLabel = label("", size: 28, color: .white)
         content.addSubview(progressLabel)
+        let stats = runTaiso(["overlay-stats"])
+        if !stats.isEmpty {
+            let sl = label(stats, size: 18,
+                           color: NSColor.white.withAlphaComponent(0.75))
+            statsLabel = sl
+            content.addSubview(sl)
+        }
         layoutLabels(in: content.bounds)
 
         // кнопка «взять в долг» — только при блоке и один раз за период
         if runTaiso(["postpone-available"]) == "yes" {
             let btn = NSButton(
-                title: L("Borrow +20 min — exercise later (×1.5)",
-                         "Взять в долг +20 мин — сделаю позже (×1.5)"),
+                title: L("Borrow +20 min — repaid from next payout",
+                         "Взять в долг +20 мин — вернётся из следующей выплаты"),
                 target: self, action: #selector(postponePressed))
             btn.bezelStyle = .rounded
             btn.controlSize = .large
@@ -164,7 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             content.addSubview(btn)
         }
 
-        let escHint = label(L("Esc — leave without credit", "Esc — выйти без зачёта"),
+        let escHint = label(L("Esc — leave (progress banked) · M — sound on/off",
+                              "Esc — выйти (прогресс зачтётся) · M — звук вкл/выкл"),
                             size: 14, color: NSColor.white.withAlphaComponent(0.6))
         escHint.frame = NSRect(x: 0, y: 6, width: content.bounds.width, height: 20)
         escHint.autoresizingMask = [.width]
@@ -172,6 +182,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] ev in
             if ev.keyCode == 53 { // Esc: прерывание честно логируется, позиция сохраняется
                 self?.abortAndQuit()
+                return nil
+            }
+            if ev.keyCode == 46 { // M: звук видео вкл/выкл (кто работает под свою музыку)
+                if let p = self?.player {
+                    p.isMuted.toggle()
+                    _ = runTaiso(["config-set", "video_muted", p.isMuted ? "1" : "0"])
+                }
                 return nil
             }
             return ev
@@ -195,8 +212,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         finished = true
         timer?.invalidate()
         let pos = player?.currentTime().seconds ?? 0
-        _ = runTaiso(["exercise-abort", "--position",
-                      String(format: "%.1f", pos.isFinite ? pos : 0)])
+        // прогресс банкуется пропорционально — Esc не сжигает сделанное
+        _ = runTaiso(["exercise-partial",
+                      "--accrued", String(Int(accrued)),
+                      "--position", String(format: "%.1f", pos.isFinite ? pos : 0)])
         accrued = required
         releaseLock()
         NSApp.terminate(nil)
@@ -216,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pausedLabel.frame = NSRect(x: 0, y: bounds.midY - 40,
                                    width: bounds.width, height: 80)
         progressLabel.frame = NSRect(x: 0, y: 30, width: bounds.width, height: 44)
+        statsLabel?.frame = NSRect(x: 0, y: 78, width: bounds.width, height: 28)
     }
 
     func tick() {
@@ -268,8 +288,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ n: Notification) {
         if accrued < required {
             let pos = player?.currentTime().seconds ?? 0
-            _ = runTaiso(["exercise-abort", "--position",
-                          String(format: "%.1f", pos)])
+            _ = runTaiso(["exercise-partial",
+                          "--accrued", String(Int(accrued)),
+                          "--position", String(format: "%.1f", pos)])
         }
         releaseLock()
     }
@@ -340,6 +361,11 @@ final class MenubarDelegate: NSObject, NSApplicationDelegate {
     @objc func resumeNow() {
         _ = runTaiso(["resume"])
         refresh()
+    }
+
+    @objc func toggleMute() {
+        let muted = cfgBool("video_muted", false)
+        _ = runTaiso(["config-set", "video_muted", muted ? "0" : "1"])
     }
 
     @objc func borrowNow() {
@@ -539,8 +565,8 @@ extension MenubarDelegate: NSMenuDelegate {
         pauseItem.submenu = pauseSub
         menu.addItem(pauseItem)
         let avail = runTaiso(["postpone-available"])
-        let borrowTitle = L("Borrow +20 min (exercise later, ×1.5)",
-                            "Взять в долг +20 мин (зарядка позже, ×1.5)")
+        let borrowTitle = L("Borrow +20 min (repaid from next payout)",
+                            "Взять в долг +20 мин (вернётся из выплаты)")
         if avail == "yes" {
             let borrow = NSMenuItem(title: borrowTitle,
                                     action: #selector(borrowNow), keyEquivalent: "")
@@ -556,6 +582,12 @@ extension MenubarDelegate: NSMenuDelegate {
             borrow.isEnabled = false
             menu.addItem(borrow)
         }
+        let muted = cfgBool("video_muted", false)
+        let mute = NSMenuItem(title: L("Video sound", "Звук видео"),
+                              action: #selector(toggleMute), keyEquivalent: "")
+        mute.target = self
+        mute.state = muted ? .off : .on
+        menu.addItem(mute)
         let langItem = NSMenuItem(title: "Language / Язык", action: nil, keyEquivalent: "")
         let langSub = NSMenu()
         let curLang = cfgLang()

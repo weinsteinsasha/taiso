@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
     "lang": "en",  # "en" | "ru" — язык menubar, окна и статус-строк
     "count_all_apps": True,  # учёт активности во всех приложениях (menubar-тикер)
     "feedback_prompt": True,  # вечерний диалог «как прошёл день» (menubar)
+    "video_muted": 0,  # 1 = видео без звука (кто работает под свою музыку)
 }
 CONFIG_BOUNDS = {  # (min, max) — отрицательные/дикие значения не должны ломать экономику
     "work_minutes_per_exercise": (5, 480),
@@ -41,6 +42,7 @@ CONFIG_BOUNDS = {  # (min, max) — отрицательные/дикие зна
     "debt_penalty_seconds_per_minute": (0, 60),
     "free_morning_minutes": (0, 480),
     "idle_gap_minutes": (1, 120),
+    "video_muted": (0, 1),
 }
 
 
@@ -237,9 +239,9 @@ def compute_allowed(con, cfg, balance):
 
 
 def required_exercise_seconds(cfg, balance):
-    debt_min = max(0, -balance) / 60.0
-    req = int(cfg["exercise_seconds"] + cfg["debt_penalty_seconds_per_minute"] * debt_min)
-    return min(req, 900)  # потолок 15 мин: битые метаданные видео не превращаются в пытку
+    # Вход всегда стоит один ролик: привычка строится на дешёвом входе.
+    # Долг наказывает выплатой (гасится из次 payout), а не длительностью зарядки.
+    return min(int(cfg["exercise_seconds"]), 900)  # потолок: битые метаданные — не пытка
 
 
 def lang(cfg):
@@ -470,6 +472,21 @@ def exercise_required():
     print(required_exercise_seconds(cfg, balance))
 
 
+def partial_credit_since_done(con):
+    """Сумма частичных кредитов (Esc посреди ролика) с последней полной зарядки."""
+    last = con.execute("SELECT COALESCE(MAX(ts_utc), 0) FROM events "
+                       "WHERE type = 'exercise_done'").fetchone()[0]
+    total = 0
+    for (payload,) in con.execute(
+            "SELECT payload FROM events WHERE type = 'exercise_partial' "
+            "AND ts_utc > ?", (last,)):
+        try:
+            total += int(json.loads(payload).get("credit", 0))
+        except (ValueError, TypeError):
+            pass
+    return total
+
+
 def exercise_done(duration):
     cfg = load_config()
     grant = int(cfg["work_minutes_per_exercise"] * 60)
@@ -477,15 +494,44 @@ def exercise_done(duration):
     con.execute("BEGIN IMMEDIATE")
     balance = con.execute(
         "SELECT balance_seconds FROM state WHERE id = 1").fetchone()[0]
-    new_balance = max(balance, 0) + grant  # долг сгорает, кредит начисляется
+    # выплата за период одна: полный grant минус уже выданные частичные кредиты;
+    # долг гасится из выплаты (balance отрицательный — просто прибавляем)
+    grant_left = max(0, grant - partial_credit_since_done(con))
+    new_balance = balance + grant_left
     con.execute(
         "UPDATE state SET balance_seconds = ?, video_position_sec = 0 WHERE id = 1",
         (new_balance,))
     con.execute("UPDATE sessions SET turn_allowed = 1")
     con.commit()
     add_event(con, "exercise_done",
-              {"duration": int(duration), "debt_cleared": max(0, -balance)})
+              {"duration": int(duration), "grant": grant_left,
+               "debt_repaid": max(0, -balance)})
     con.close()
+
+
+def exercise_partial(accrued, position):
+    """Esc посреди ролика: прогресс банкуется пропорционально, а не сгорает."""
+    cfg = load_config()
+    grant = int(cfg["work_minutes_per_exercise"] * 60)
+    exsec = max(1, int(cfg["exercise_seconds"]))
+    con = connect()
+    con.execute("BEGIN IMMEDIATE")
+    balance = con.execute(
+        "SELECT balance_seconds FROM state WHERE id = 1").fetchone()[0]
+    already = partial_credit_since_done(con)
+    credit = min(int(grant * min(1.0, accrued / exsec)), max(0, grant - already))
+    new_balance = balance + credit
+    con.execute(
+        "UPDATE state SET balance_seconds = ?, video_position_sec = ? WHERE id = 1",
+        (new_balance, float(position)))
+    if new_balance > 0:
+        con.execute("UPDATE sessions SET turn_allowed = 1")
+    con.commit()
+    add_event(con, "exercise_partial",
+              {"accrued": int(accrued), "credit": credit,
+               "position": float(position)})
+    con.close()
+    print(credit)
 
 
 def exercise_abort(position):
@@ -603,7 +649,8 @@ def cmd_stats(report=False):
     done_week = sum(1 for ts, t, _ in rows
                     if t == "exercise_done" and ts >= week_ago)
     aborts_week = sum(1 for ts, t, _ in rows
-                      if t == "exercise_abort" and ts >= week_ago)
+                      if t in ("exercise_abort", "exercise_partial")
+                      and ts >= week_ago)
     # стрик: подряд дней с зарядкой, заканчивая сегодня/вчера
     streak = 0
     d = datetime.date.today()
@@ -663,6 +710,45 @@ def main():
     elif cmd == "exercise-abort":
         exercise_abort(float(args[args.index("--position") + 1])
                        if "--position" in args else 0)
+    elif cmd == "exercise-partial":
+        exercise_partial(
+            float(args[args.index("--accrued") + 1]) if "--accrued" in args else 0,
+            float(args[args.index("--position") + 1]) if "--position" in args else 0)
+    elif cmd == "overlay-stats":
+        # для окна: «Сегодня: N мин · стрик: N дн» — фокус на прогрессе (фидбек Юрия)
+        cfg = load_config()
+        con = connect()
+        rows = con.execute("SELECT ts_utc, type, payload FROM events "
+                           "WHERE type IN ('exercise_done', 'exercise_partial')").fetchall()
+        con.close()
+        today = time.strftime("%Y-%m-%d", time.localtime())
+
+        def _day(ts):
+            return time.strftime("%Y-%m-%d", time.localtime(ts))
+
+        secs_today = 0
+        for ts, t, payload in rows:
+            if _day(ts) != today:
+                continue
+            try:
+                d = json.loads(payload)
+            except ValueError:
+                d = {}
+            secs_today += int(d.get("duration", 0) if t == "exercise_done"
+                              else d.get("accrued", 0))
+        done_days = sorted({_day(ts) for ts, t, _ in rows if t == "exercise_done"})
+        streak = 0
+        day = today
+        while day in done_days:
+            streak += 1
+            day = time.strftime(
+                "%Y-%m-%d", time.localtime(time.mktime(
+                    time.strptime(day, "%Y-%m-%d")) - 86400))
+        mins = (secs_today + 59) // 60
+        if lang(cfg) == "ru":
+            print("Сегодня: %d мин · стрик: %d дн" % (mins, streak))
+        else:
+            print("Today: %d min · streak: %d d" % (mins, streak))
     elif cmd == "video-pos":
         video_pos(float(args[args.index("--set") + 1])
                   if "--set" in args else None)
